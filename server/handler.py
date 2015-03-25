@@ -3,19 +3,12 @@
 import hashlib
 
 class Handler(object):
-    def __init__(self, server, client):
-        self.server = server
-        self.client = client
-
-    def handle(self, request):
+    def handle(self, server, client, request):
         pass
 
 
 class DefaultHandler(Handler):
-    def __init__(self, server, client):
-        super(DefaultHandler, self).__init__(server, client)
-
-    def handle(self, request):
+    def handle(self, server, client, request):
         # print 'handle the request\n%s' % (request)
         if request == 'quit':
             self.server.stop()

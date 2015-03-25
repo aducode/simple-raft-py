@@ -1,10 +1,10 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-import time, random
+
 
 class State(object):
     def __init__(self, node):
-        self._node = node
+        self.node = node
 
 
 class Follower(State):

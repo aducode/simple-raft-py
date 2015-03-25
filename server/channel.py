@@ -26,7 +26,6 @@ class LineChannel(Channel):
     def __init__(self, server, client, next):
         super(LineChannel, self).__init__(server, client, next)
         self.input_buffer = ''
-        self.output_queue = Queue.Queue()
 
     def input(self, request):
         if '\n' not in request:

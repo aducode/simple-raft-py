@@ -69,7 +69,7 @@ class Channel2Handler(Channel):
     def input(self, data):
         response = None
         if isinstance(self.next, Handler):
-            response = self.next.handle(data)
+            response = self.next.handle(self.server, self.client, data)
         elif isinstance(self.next, types.FunctionType):
             response = self.next(self.server, self.client, data)
         if response:
@@ -85,7 +85,7 @@ class Channel2Handler(Channel):
 
 
 class Server(object):
-    def __init__(self, host='', port=2333, **kwargs):
+    def __init__(self, port=2333, host='', **kwargs):
         self.host = host
         self.port = port
         self.inputs = []
@@ -121,11 +121,13 @@ class Server(object):
             subclass = subclass.__base__
 
     def register_handler(self, handler):
-        if handler and (self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)):
+        if handler and (self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)) or isinstance(handler, Handler):
             self.handler_class = handler
 
     def register_channel(self, channel):
         if channel and self._is_subclass_of(channel, Channel):
+            if not self.channel_class:
+                self.channel_class = []
             self.channel_class.append(channel)
 
     def get_channel(self, client):
@@ -135,8 +137,8 @@ class Server(object):
         :return:
         """
         if self._is_subclass_of(self.handler_class, Handler):
-            c = self.handler_class(self, client)
-        elif isinstance(self.handler_class, types.FunctionType):
+            c = self.handler_class()
+        elif isinstance(self.handler_class, (Handler, types.FunctionType)):
             c = self.handler_class
         else:
             return
