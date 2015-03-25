@@ -72,16 +72,16 @@ class Server(object):
         self.timers = {}
         # 0 running 1 stopping 2 stopped
         self.state = 0
-
-        def echo_timer(except_time, real_time, value):
-            print '[%s]happen:except_time:%.3f, real:%.3f' % (value, except_time, real_time, )
-
-        def stop_the_server(except_time, real_time, server):
-            print 'stop the server'
-            self.stop()
-
-        self.set_timer(0.3, True, echo_timer, 1)
-        self.set_timer(3, False, stop_the_server, self)
+        # test timer
+        # def echo_timer(except_time, real_time, value):
+        #     print '[%s]happen:except_time:%.3f, real:%.3f' % (value, except_time, real_time, )
+        #
+        # def stop_the_server(except_time, real_time, server):
+        #     print 'stop the server'
+        #     self.stop()
+        #
+        # self.set_timer(0.3, True, echo_timer, 1)
+        # self.set_timer(3, False, stop_the_server, self)
 
     def handle(self, request):
         """
@@ -89,7 +89,8 @@ class Server(object):
         :param request: 接收到数据
         :return: 返回的response
         """
-        print 'handle the request:\n', request
+        if request == 'quit':
+            self.stop()
         return request
 
     def handle_io(self):
@@ -120,9 +121,13 @@ class Server(object):
                         else:
                             msgs = data.split('\n')
                             self.input_buffer[r] += msgs[0]
-                            self.request_queue[r].put(self.input_buffer[r])
+                            _buf = self.input_buffer[r].strip()
+                            if _buf:
+                                self.request_queue[r].put(_buf)
                             for i in xrange(1, len(msgs) - 1):
-                                self.request_queue.put(msgs[i])
+                                _buf = msgs[i].strip()
+                                if _buf:
+                                    self.request_queue[r].put(_buf)
                             self.input_buffer[r] = msgs[len(msgs) - 1]
                         # print 'receive data: ', request, ' from ', r.getpeername()
                         # TODO check request type
@@ -132,8 +137,8 @@ class Server(object):
                         # self.response_queue[r]=Queue.Queue()
                         # self.response_queue[r] = self.handle(request)
                         # self.request_queue[r].put(request)
-                        if r not in self.outputs:
-                            self.outputs.append(r)
+                        # if r not in self.outputs:
+                        #     self.outputs.append(r)
                     else:
                         client_closed = True
                 if client_closed:
@@ -178,6 +183,7 @@ class Server(object):
             else:
                 # send response to the response_queue, it will be sent in next loop
                 self.response_queue[client].put(self.handle(request))
+                self.outputs.append(client)
 
     def handle_timers(self):
         # print 'handle the timers ...'
@@ -251,12 +257,12 @@ class Server(object):
             # if running or has stopped, do nothing
             return
         for conn in self.request_queue:
-            if self.state == 1:
+            if self.is_stopping():
                 # safe stop
                 # we should complete the request in the queue
                 while True:
                     try:
-                        request = self.request_queue.get_nowait()
+                        request = self.request_queue[conn].get_nowait()
                         response = self.handle(request)
                         conn.send(response)
                     except Queue.Empty:
@@ -276,18 +282,33 @@ class Server(object):
                 conn.close()
             except Exception:
                 pass
-            self.request_queue.remove(conn)
+            else:
+                if conn in self.inputs:
+                    self.inputs.remove(conn)
+                if conn in self.outputs:
+                    self.outputs.remove(conn)
+                if conn in self.exceptions:
+                    self.exceptions.remove(conn)
         for conn in self.response_queue:
             try:
                 conn.close()
             except Exception:
                 pass
-            self.response_queue.remove(conn)
+            else:
+                if conn in self.inputs:
+                    self.inputs.remove(conn)
+                if conn in self.outputs:
+                    self.outputs.remove(conn)
+                if conn in self.exceptions:
+                    self.exceptions.remove(conn)
         if self.accepter:
             try:
                 self.accepter.close()
             except Exception:
                 pass
+            else:
+                if self.accepter in self.inputs:
+                    self.inputs.remove(self.accepter)
 
     def initialise(self):
         """
@@ -321,7 +342,7 @@ class Server(object):
             self.handle_requests()
             # handle timer
             self.handle_timers()
-            if self.state > 0:
+            if not self.is_running():
                 # stoppde or stopping
                 break
         # release the resources
