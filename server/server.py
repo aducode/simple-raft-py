@@ -5,7 +5,6 @@ import select
 import time
 import types
 import Queue
-import threading
 
 from handler import Handler, DefaultHandler
 from channel import Channel
@@ -27,9 +26,37 @@ class IO2Channel(Channel):
     """
     直接与IO关联的Channel
     """
-    def __init__(self, server, client ,next):
-        super(IO2Channel, self).__init__(self,server, client, next)
+    def __init__(self, server, client, next):
+        super(IO2Channel, self).__init__(server, client, next)
 
+    def input(self, data=None):
+        client_close = False
+        try:
+            request = self.client.recv(1024)
+        except Exception:
+            client_close = True
+        else:
+            if request:
+                self.next.input(request)
+            else:
+                client_close = True
+        if client_close:
+            # Interrupt empty result as closed connection
+            print 'client closing....', self.client.getpeername()
+            if self.client in self.outputs:
+                self.outputs.remove(self.client)
+            self.server.inputs.remove(self.client)
+            self.client.close()
+            # remove message queue
+            del self.server.context[self.client]
+
+
+    def output(self):
+        response, end = self.next.output()
+        if response:
+            self.client.send(response)
+        if (not response or end) and self.client in self.server.outputs:
+            self.server.outputs.remove(self.client)
 
 class Channel2Handler(Channel):
     """
@@ -116,6 +143,7 @@ class Server(object):
         if self.channel_class:
             for claz in self.channel_class[::-1]:
                 c = claz(self, client, c)
+        c = IO2Channel(self, client, c)
         return c
 
     def getpeername(self):
@@ -135,37 +163,9 @@ class Server(object):
                 self.context[connection] = self.get_channel(connection)
             else:
                 # readable from other system
-                client_closed = False
-                try:
-                    data = r.recv(1024)
-                except socket.error:
-                    # client  close the socket
-                    client_closed = True
-                else:
-                    if data:
-                        self.context[r].input(data)
-                        #self.outputs.append(r)
-                    else:
-                        client_closed = True
-                if client_closed:
-                    # Interrupt empty result as closed connection
-                    print 'client closing....', r.getpeername()
-                    if r in self.outputs:
-                        self.outputs.remove(r)
-                    self.inputs.remove(r)
-                    r.close()
-                    # remove message queue
-                    del self.context[r]
+                self.context[r].input()
         for w in writable:
-            response, last_data = self.context[w].output()
-            if not response:
-                # print 'Empty response queue ', w.getpeername()
-                # 这里应该删除，因为本机网络输出一般都处于writable状态，如果不删除，那么将一直被激活
-                self.outputs.remove(w)
-            else:
-                w.send(response)
-                if last_data:
-                    self.outputs.remove(w)
+            self.context[w].output()
         for e in exceptional:
             # print 'exception condition on ', e.getpeername()
             self.inputs.remove(e)
@@ -298,6 +298,10 @@ class Server(object):
         self.state = 0
 
     def server_forever(self):
+        """
+        启动服务
+        :return:
+        """
         # init the server runtime env
         self.initialise()
         # Main Loop
