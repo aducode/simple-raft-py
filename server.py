@@ -70,17 +70,18 @@ class Server(object):
         self.request_queue = {}
         self.response_queue = {}
         self.timers = {}
-        self.running = False
+        # 0 running 1 stopping 2 stopped
+        self.state = 0
 
         def echo_timer(except_time, real_time, value):
             print '[%s]happen:except_time:%.3f, real:%.3f' % (value, except_time, real_time, )
 
-        # def stop_the_server(except_time, real_time, server):
-        # print 'stop the server'
-        # server.running = False
+        def stop_the_server(except_time, real_time, server):
+            print 'stop the server'
+            self.stop()
 
         self.set_timer(0.3, True, echo_timer, 1)
-        #self.set_timer(3, False, stop_the_server, self)
+        self.set_timer(3, False, stop_the_server, self)
 
     def handle(self, request):
         """
@@ -91,7 +92,7 @@ class Server(object):
         print 'handle the request:\n', request
         return request
 
-    def do_io(self):
+    def handle_io(self):
         # print 'waiting for next event'
         readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions, self.timeout)
         for r in readable:
@@ -181,19 +182,28 @@ class Server(object):
     def handle_timers(self):
         # print 'handle the timers ...'
         current = time.time()
+        reset_timers = {}
+        # 计算下次循环的select 超时时间
+        self.timeout = None
         for t, events in self.timers.items():
-            if t <= current and self.running:
+            if t <= current and self.is_running():
                 # 说明已经过了或者到时间了，需要处理
                 for event in events:
                     event.invoke(t, current)
                     if event.is_cron:
                         next_time = event.time + t
-                        if next_time not in self.timers:
-                            self.timers[next_time] = []
-                        self.timers[next_time].append(event)
+                        if next_time not in reset_timers:
+                            reset_timers[next_time] = []
+                        reset_timers[next_time].append(event)
                     self.timers[t].remove(event)
                 # 处理完了，就删除
                 del self.timers[t]
+        self.timers.update(reset_timers)
+        for t in self.timers:
+            if not self.timeout or (t > current and t - current < self.timeout):
+                self.timeout = t - current
+                # print 'next timeout is ', self.timeout
+
 
     def set_timer(self, target_time, is_cron, func, *args, **kwargs):
         """
@@ -220,11 +230,46 @@ class Server(object):
                     events.remove(event)
 
     def stop(self):
+        if self.state == 0:
+            self.state = 1
+
+    def is_running(self):
+        return self.state == 0
+
+    def is_stopping(self):
+        return self.state == 1
+
+    def is_stopped(self):
+        return self.state == 2
+
+    def realease(self):
         """
         停止服务, 释放资源
         :return:
         """
-        if self.running:
+        if self.state == 0 or self.state == 2:
+            # if running or has stopped, do nothing
+            return
+        for conn in self.request_queue:
+            if self.state == 1:
+                # safe stop
+                # we should complete the request in the queue
+                while True:
+                    try:
+                        request = self.request_queue.get_nowait()
+                        response = self.handle(request)
+                        conn.send(response)
+                    except Queue.Empty:
+                        break
+        self.state = 2
+        self.finalize()
+
+    def finalize(self):
+        """
+        关闭连接
+        :return:
+        """
+        if self.state == 0 or self.state == 1:
             return
         for conn in self.request_queue:
             try:
@@ -244,27 +289,42 @@ class Server(object):
             except Exception:
                 pass
 
-    def server_forever(self):
-        self.running = True
+    def initialise(self):
+        """
+        初始化
+        :return:
+        """
         self.accepter = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.accepter.setblocking(False)
         self.accepter.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.accepter.bind((self.address, self.port))
         self.accepter.listen(10)
         self.inputs.append(self.accepter)
+        # 计算超时时间
+        self.timeout = None
+        current = time.time()
+        for t in self.timers:
+            timeout = t - current
+            if not self.timeout or (timeout > 0 and timeout < self.timeout):
+                self.timeout = timeout
+        # set state
+        self.state = 0
+
+    def server_forever(self):
+        # init the server runtime env
+        self.initialise()
         # Main Loop
-        # timeout 5ms
-        self.timeout = 0.05
         while self.inputs:
             # handle io
-            self.do_io()
+            self.handle_io()
             # handle message
             self.handle_requests()
             # handle timer
             self.handle_timers()
-            if not self.running:
-                self.stop()
+            if self.state > 0:
+                # stoppde or stopping
                 break
-
+        # release the resources
+        self.realease()
         print 'Server stopped!'
 
