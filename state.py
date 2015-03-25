@@ -1,26 +1,35 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
+import time, random
+
+class State(object):
+    def __init__(self, node):
+        self._node = node
 
 
-class Follower(object):
+class Follower(State):
     """
     Follower State
     """
+
     def __init__(self, node):
-        self._node = node
+        super(Follower, self).__init__(node)
 
 
-class Candidate(object):
+class Candidate(State):
     """
     Candidate  State
     """
+
     def __init__(self, node):
-        self._node = node
+        super(Candidate, self).__init__(node)
 
 
-class Leader(object):
+
+class Leader(State):
     """
     Leader State
     """
+
     def __init__(self, node):
-        self._node = node
+        super(Leader, self).__init__(node)

@@ -4,6 +4,14 @@
 
 class SimpleDB(object):
     """
-    Simple Local File db  engine
+    Simple Memeory DB
     """
-    pass
+
+    def __init__(self):
+        self.data = {}
+
+    def set(self, key, value):
+        self.data[key] = value
+
+    def get(self, key):
+        return self.data.get(key, None)
