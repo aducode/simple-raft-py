@@ -2,9 +2,13 @@
 # -*- coding:utf-8 -*-
 import socket
 import select
-import Queue
 import time
 import types
+import Queue
+import threading
+
+from handler import Handler, DefaultHandler
+from channel import Channel
 
 
 class TimeEvent(object):
@@ -19,102 +23,58 @@ class TimeEvent(object):
         self.func(excepted_time, real_time, *self.args, **self.kwargs)
 
 
-class Channel(object):
+class IO2Channel(Channel):
+    """
+    直接与IO关联的Channel
+    """
+    def __init__(self, server, client ,next):
+        super(IO2Channel, self).__init__(self,server, client, next)
+
+
+class Channel2Handler(Channel):
+    """
+    与handler关联起来
+    """
     def __init__(self, server, client, next):
-        self.server = server
-        self.client = client
-        self.next = next
+        super(Channel2Handler, self).__init__(server, client, next)
+        self.queue = Queue.Queue()
 
     def input(self, data):
-        pass
+        if isinstance(self.next, Handler):
+            response = self.next.handle(data)
+        elif isinstance(self.next, types.FunctionType):
+            response = self.next(self.server, self.client, data)
+        if response:
+            self.queue.put(response)
+            if self.client not in self.server.outputs:
+                self.server.outputs.append(self.client)
 
     def output(self):
-        pass
-
-
-class Handler(object):
-    def __init__(self, server, client):
-        self.server = server
-        self.client = client
-
-    def handle(self, request):
-        pass
-
-
-class DefaultHandler(Handler):
-    def __init__(self, server, client):
-        super(DefaultHandler, self).__init__(server, client)
-
-    def handle(self, request):
-        print '[%s]handle the request\n%s' % (self.client.getpeername(), request)
-        if request == 'quit':
-            self.server.stop()
-        return request
-
-
-class LineChannel(Channel):
-    """
-    保存客户端连接
-    """
-
-    def __init__(self, server, client, next):
-        super(LineChannel, self).__init__(server, client, next)
-        self.input_buffer = ''
-        self.output_queue = Queue.Queue()
-
-    def input(self, request):
-        if '\n' not in request:
-            self.input_buffer += request
-        else:
-            msgs = request.split('\n')
-            msg = (self.input_buffer + msgs[0]).strip()
-            if msg:
-                self.input_buffer = ''
-                if isinstance(self.next, Channel):
-                    self.next.input(msg)
-                elif isinstance(self.next, Handler):
-                    self.output_queue.put(self.next.handle(msg))
-            for msg in msgs[1:-1]:
-                msg = msg.strip()
-                if msg:
-                    if isinstance(self.next, Channel):
-                        self.next.input(msg)
-                    elif isinstance(self.next, Handler):
-                        self.output_queue.put(self.next.handle(msg))
-            msg = msgs[-1]
-            if msg:
-                self.input_buffer = msg.strip()
-
-    def output(self):
-        if isinstance(self.next, Channel):
-            return self.next.output()
-        elif isinstance(self.next, Handler):
-            try:
-                return self.output_queue.get_nowait()
-            except Queue.Empty:
-                return
+        try:
+            return self.queue.get_nowait(), self.queue.empty()
+        except Queue.Empty:
+            return None, True
 
 
 class Server(object):
-    def __init__(self, address='', port=2333, **kwargs):
-        self.address = address
+    def __init__(self, host='', port=2333, **kwargs):
+        self.host = host
         self.port = port
         self.inputs = []
         self.outputs = []
         self.exceptions = []
         self.context = {}
-        if 'handler' in kwargs and isinstance(kwargs['handler'], Handler):
+        self.channel_class = None
+        if 'handler' in kwargs and isinstance(kwargs['handler'], (Handler, types.FunctionType)):
             self.handler_class = kwargs['handler']
         else:
             self.handler_class = DefaultHandler
         if 'channels' in kwargs:
             cc = kwargs['channels']
-            if isinstance(cc, Channel):
+            if self._is_subclass_of(cc, Channel):
                 self.channel_class = [cc, ]
-            elif (isinstance(cc, types.TupleType) or isinstance(cc, types.ListType)) and len(cc)>0:
-                self.channel_class = [c for c in cc if isinstance(c, Channel)]
-        else:
-            self.channel_class = [LineChannel, ]
+            elif isinstance(cc, (types.TupleType, types.ListType)) and len(cc) > 0:
+                self.channel_class = [c for c in cc if self._is_subclass_of(c, Channel)]
         # self.input_buffer = {}
         # self.request_queue = {}
         # self.response_queue = {}
@@ -122,18 +82,44 @@ class Server(object):
         # 0 running 1 stopping 2 stopped
         self.state = 0
 
+    def _is_subclass_of(self, subclass, superclass):
+        if not subclass or not superclass or not isinstance(subclass, types.TypeType) or not isinstance(superclass, types.TypeType):
+            return False
+        while True:
+            if subclass is superclass:
+                return True
+            elif subclass is object:
+                return False
+            subclass = subclass.__base__
+
+    def register_handler(self, handler):
+        if handler and (self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)):
+            self.handler_class = handler
+
+    def register_channel(self, channel):
+        if channel and self._is_subclass_of(channel, Channel):
+            self.channel_class.append(channel)
+
     def get_channel(self, client):
         """
         初始化链式的channel
         :param client:
         :return:
         """
-        if not self.channel_class or not self.handler_class:
+        if self._is_subclass_of(self.handler_class, Handler):
+            c = self.handler_class(self, client)
+        elif isinstance(self.handler_class, types.FunctionType):
+            c = self.handler_class
+        else:
             return
-        c = self.handler_class(self, client)
-        for claz in self.channel_class[::-1]:
-            c = claz(self, client, c)
+        c = Channel2Handler(self, client, c)
+        if self.channel_class:
+            for claz in self.channel_class[::-1]:
+                c = claz(self, client, c)
         return c
+
+    def getpeername(self):
+        return self.host, self.port
 
     def handle_io_event(self):
         # print 'waiting for next event'
@@ -158,12 +144,12 @@ class Server(object):
                 else:
                     if data:
                         self.context[r].input(data)
-                        self.outputs.append(r)
+                        #self.outputs.append(r)
                     else:
                         client_closed = True
                 if client_closed:
                     # Interrupt empty result as closed connection
-                    # print 'client closing....', r.getpeername()
+                    print 'client closing....', r.getpeername()
                     if r in self.outputs:
                         self.outputs.remove(r)
                     self.inputs.remove(r)
@@ -171,13 +157,15 @@ class Server(object):
                     # remove message queue
                     del self.context[r]
         for w in writable:
-            response = self.context[w].output()
+            response, last_data = self.context[w].output()
             if not response:
                 # print 'Empty response queue ', w.getpeername()
                 # 这里应该删除，因为本机网络输出一般都处于writable状态，如果不删除，那么将一直被激活
                 self.outputs.remove(w)
             else:
                 w.send(response)
+                if last_data:
+                    self.outputs.remove(w)
         for e in exceptional:
             # print 'exception condition on ', e.getpeername()
             self.inputs.remove(e)
@@ -296,7 +284,7 @@ class Server(object):
         self.accepter = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.accepter.setblocking(False)
         self.accepter.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.accepter.bind((self.address, self.port))
+        self.accepter.bind((self.host, self.port))
         self.accepter.listen(10)
         self.inputs.append(self.accepter)
         # 计算超时时间
@@ -324,4 +312,5 @@ class Server(object):
         # release the resources
         self.realease()
         print 'Server stopped!'
+
 
