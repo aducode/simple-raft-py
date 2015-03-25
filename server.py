@@ -4,6 +4,7 @@ import socket
 import select
 import Queue
 import time
+import types
 
 
 class TimeEvent(object):
@@ -19,81 +20,122 @@ class TimeEvent(object):
 
 
 class Channel(object):
+    def __init__(self, server, client, next):
+        self.server = server
+        self.client = client
+        self.next = next
+
+    def input(self, data):
+        pass
+
+    def output(self):
+        pass
+
+
+class Handler(object):
+    def __init__(self, server, client):
+        self.server = server
+        self.client = client
+
+    def handle(self, request):
+        pass
+
+
+class DefaultHandler(Handler):
+    def __init__(self, server, client):
+        super(DefaultHandler, self).__init__(server, client)
+
+    def handle(self, request):
+        print '[%s]handle the request\n%s' % (self.client.getpeername(), request)
+        if request == 'quit':
+            self.server.stop()
+        return request
+
+
+class LineChannel(Channel):
     """
     保存客户端连接
     """
 
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, server, client, next):
+        super(LineChannel, self).__init__(server, client, next)
+        self.input_buffer = ''
+        self.output_queue = Queue.Queue()
 
-
-class Input(object):
-    def input(self):
-        pass
-
-
-class Output(object):
-    def output(self):
-        pass
-
-
-class Buffer(Input, Output):
-    pass
-
-
-class BaseBuffer(Buffer):
-    def __init__(self, channel):
-        self.channel = channel
-        self.input_buf = Queue.Queue()
-        self.output_buf = Queue.Queue()
-
-    def input(self, data):
-        self.input_buf.put(data)
-
-    def output(self):
-        try:
-            data = self.output_buf.get_nowait()
-        except Queue.Empty:
-            return None
+    def input(self, request):
+        if '\n' not in request:
+            self.input_buffer += request
         else:
-            return data
+            msgs = request.split('\n')
+            msg = (self.input_buffer + msgs[0]).strip()
+            if msg:
+                self.input_buffer = ''
+                if isinstance(self.next, Channel):
+                    self.next.input(msg)
+                elif isinstance(self.next, Handler):
+                    self.output_queue.put(self.next.handle(msg))
+            for msg in msgs[1:-1]:
+                msg = msg.strip()
+                if msg:
+                    if isinstance(self.next, Channel):
+                        self.next.input(msg)
+                    elif isinstance(self.next, Handler):
+                        self.output_queue.put(self.next.handle(msg))
+            msg = msgs[-1]
+            if msg:
+                self.input_buffer = msg.strip()
+
+    def output(self):
+        if isinstance(self.next, Channel):
+            return self.next.output()
+        elif isinstance(self.next, Handler):
+            try:
+                return self.output_queue.get_nowait()
+            except Queue.Empty:
+                return
 
 
 class Server(object):
-    def __init__(self, address='', port=2333):
+    def __init__(self, address='', port=2333, **kwargs):
         self.address = address
         self.port = port
         self.inputs = []
         self.outputs = []
         self.exceptions = []
-        self.input_buffer = {}
-        self.request_queue = {}
-        self.response_queue = {}
+        self.context = {}
+        if 'handler' in kwargs and isinstance(kwargs['handler'], Handler):
+            self.handler_class = kwargs['handler']
+        else:
+            self.handler_class = DefaultHandler
+        if 'channels' in kwargs:
+            cc = kwargs['channels']
+            if isinstance(cc, Channel):
+                self.channel_class = [cc, ]
+            elif (isinstance(cc, types.TupleType) or isinstance(cc, types.ListType)) and len(cc)>0:
+                self.channel_class = [c for c in cc if isinstance(c, Channel)]
+        else:
+            self.channel_class = [LineChannel, ]
+        # self.input_buffer = {}
+        # self.request_queue = {}
+        # self.response_queue = {}
         self.timers = {}
         # 0 running 1 stopping 2 stopped
         self.state = 0
-        # test timer
-        # def echo_timer(except_time, real_time, value):
-        #     print '[%s]happen:except_time:%.3f, real:%.3f' % (value, except_time, real_time, )
-        #
-        # def stop_the_server(except_time, real_time, server):
-        #     print 'stop the server'
-        #     self.stop()
-        #
-        # self.set_timer(0.3, True, echo_timer, 1)
-        # self.set_timer(3, False, stop_the_server, self)
 
-    def handle(self, request):
+    def get_channel(self, client):
         """
-        处理IO
-        :param request: 接收到数据
-        :return: 返回的response
+        初始化链式的channel
+        :param client:
+        :return:
         """
-        if request == 'quit':
-            self.stop()
-        return request
+        if not self.channel_class or not self.handler_class:
+            return
+        c = self.handler_class(self, client)
+        for claz in self.channel_class[::-1]:
+            c = claz(self, client, c)
+        return c
 
-    def handle_io(self):
+    def handle_io_event(self):
         # print 'waiting for next event'
         readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions, self.timeout)
         for r in readable:
@@ -104,8 +146,7 @@ class Server(object):
                 connection.setblocking(False)
                 self.inputs.append(connection)
                 # print 'accept %s' % connection
-                self.request_queue[connection] = Queue.Queue()
-                self.input_buffer[connection] = ''
+                self.context[connection] = self.get_channel(connection)
             else:
                 # readable from other system
                 client_closed = False
@@ -116,29 +157,8 @@ class Server(object):
                     client_closed = True
                 else:
                     if data:
-                        if '\n' not in data:
-                            self.input_buffer[r] += data
-                        else:
-                            msgs = data.split('\n')
-                            self.input_buffer[r] += msgs[0]
-                            _buf = self.input_buffer[r].strip()
-                            if _buf:
-                                self.request_queue[r].put(_buf)
-                            for i in xrange(1, len(msgs) - 1):
-                                _buf = msgs[i].strip()
-                                if _buf:
-                                    self.request_queue[r].put(_buf)
-                            self.input_buffer[r] = msgs[len(msgs) - 1]
-                        # print 'receive data: ', request, ' from ', r.getpeername()
-                        # TODO check request type
-                        # if has a high priority
-                        # we can fast handle it like this:
-                        # if r not in self.reponse_queue:
-                        # self.response_queue[r]=Queue.Queue()
-                        # self.response_queue[r] = self.handle(request)
-                        # self.request_queue[r].put(request)
-                        # if r not in self.outputs:
-                        #     self.outputs.append(r)
+                        self.context[r].input(data)
+                        self.outputs.append(r)
                     else:
                         client_closed = True
                 if client_closed:
@@ -149,13 +169,10 @@ class Server(object):
                     self.inputs.remove(r)
                     r.close()
                     # remove message queue
-                    del self.request_queue[r]
-                    del self.response_queue[r]
-                    del self.input_buffer[r]
+                    del self.context[r]
         for w in writable:
-            try:
-                response = self.response_queue[w].get_nowait()
-            except Queue.Empty:
+            response = self.context[w].output()
+            if not response:
                 # print 'Empty response queue ', w.getpeername()
                 # 这里应该删除，因为本机网络输出一般都处于writable状态，如果不删除，那么将一直被激活
                 self.outputs.remove(w)
@@ -167,25 +184,9 @@ class Server(object):
             if e in self.outputs:
                 self.outputs.remove(e)
             e.close()
-            del self.request_queue[e]
-            del self.response_queue[e]
-            del self.input_buffer[e]
+            del self.context[e]
 
-    def handle_requests(self):
-        # print 'handle the request ...'
-        for client, requests in self.request_queue.items():
-            if client not in self.response_queue:
-                self.response_queue[client] = Queue.Queue()
-            try:
-                request = requests.get_nowait()
-            except Queue.Empty:
-                pass
-            else:
-                # send response to the response_queue, it will be sent in next loop
-                self.response_queue[client].put(self.handle(request))
-                self.outputs.append(client)
-
-    def handle_timers(self):
+    def handle_timeout_event(self):
         # print 'handle the timers ...'
         current = time.time()
         reset_timers = {}
@@ -256,17 +257,6 @@ class Server(object):
         if self.state == 0 or self.state == 2:
             # if running or has stopped, do nothing
             return
-        for conn in self.request_queue:
-            if self.is_stopping():
-                # safe stop
-                # we should complete the request in the queue
-                while True:
-                    try:
-                        request = self.request_queue[conn].get_nowait()
-                        response = self.handle(request)
-                        conn.send(response)
-                    except Queue.Empty:
-                        break
         self.state = 2
         self.finalize()
 
@@ -277,19 +267,7 @@ class Server(object):
         """
         if self.state == 0 or self.state == 1:
             return
-        for conn in self.request_queue:
-            try:
-                conn.close()
-            except Exception:
-                pass
-            else:
-                if conn in self.inputs:
-                    self.inputs.remove(conn)
-                if conn in self.outputs:
-                    self.outputs.remove(conn)
-                if conn in self.exceptions:
-                    self.exceptions.remove(conn)
-        for conn in self.response_queue:
+        for conn in self.context:
             try:
                 conn.close()
             except Exception:
@@ -337,11 +315,9 @@ class Server(object):
         # Main Loop
         while self.inputs:
             # handle io
-            self.handle_io()
-            # handle message
-            self.handle_requests()
+            self.handle_io_event()
             # handle timer
-            self.handle_timers()
+            self.handle_timeout_event()
             if not self.is_running():
                 # stoppde or stopping
                 break
