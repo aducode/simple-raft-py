@@ -42,9 +42,9 @@ class IO2Channel(Channel):
                 client_close = True
         if client_close:
             # Interrupt empty result as closed connection
-            print 'client closing....', self.client.getpeername()
-            if self.client in self.outputs:
-                self.outputs.remove(self.client)
+            #print 'client closing....', self.client.getpeername()
+            if self.client in self.server.outputs:
+                self.server.outputs.remove(self.client)
             self.server.inputs.remove(self.client)
             self.client.close()
             # remove message queue
@@ -67,6 +67,7 @@ class Channel2Handler(Channel):
         self.queue = Queue.Queue()
 
     def input(self, data):
+        response = None
         if isinstance(self.next, Handler):
             response = self.next.handle(data)
         elif isinstance(self.next, types.FunctionType):

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-
+import hashlib
 
 class Handler(object):
     def __init__(self, server, client):
@@ -16,7 +16,7 @@ class DefaultHandler(Handler):
         super(DefaultHandler, self).__init__(server, client)
 
     def handle(self, request):
-        print '[%s]handle the request\n%s' % (self.client.getpeername(), request)
+        # print 'handle the request\n%s' % (request)
         if request == 'quit':
             self.server.stop()
-        return request
+        return request.upper() + '\n' + hashlib.md5(request.encode('utf-8')).hexdigest()+'\n'
