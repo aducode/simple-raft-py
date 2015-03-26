@@ -16,7 +16,7 @@ class Message(object):
             if len(tokens) == 2:
                 return ClientMessage('get', tokens[1])
             else:
-                return None
+                return InvalidMessage()
         elif data.startswith('del'):
             auto_commit = False
             if data.endswith(';commit'):
@@ -26,7 +26,7 @@ class Message(object):
             if len(tokens) == 2:
                 return ClientMessage('delete', tokens[1], None, auto_commit)
             else:
-                return None
+                return InvalidMessage()
         elif data.startswith('set'):
             # 客户端发来的set操作
             auto_comit = False
@@ -37,13 +37,15 @@ class Message(object):
             if len(tokens) == 3:
                 return ClientMessage('set', tokens[1], tokens[2], auto_comit)
             else:
-                return None
+                return InvalidMessage()
         elif data == 'commit':
             # 客户端发来的提交
             return ClientMessage('commit')
+        elif data == 'rollback':
+            return ClientMessage('rollback')
         else:
             # 暂时忽略其他节点发来的信息
-            pass
+            return InvalidMessage()
 
 
 class ClientMessage(Message):
@@ -63,3 +65,11 @@ class ClientMessage(Message):
 
 class NodeMessage(Message):
     pass
+
+
+class InvalidMessage(Message):
+    def __init__(self, msg='invalid message'):
+        self.message = msg
+
+    def __str__(self):
+        return self.message

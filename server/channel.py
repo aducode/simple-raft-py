@@ -45,4 +45,5 @@ class LineChannel(Channel):
                 self.input_buffer = msg.strip()
 
     def output(self):
-        return self.next.output()
+        data, end = self.next.output()
+        return data+'\r\n', end

@@ -66,3 +66,8 @@ class SimpleDB(object):
             if session_id in self.session:
                 del self.session[session_id]
         return 'success'
+
+    def rollback(self, session_id, key=None, value=None, auto_commit=False):
+        if session_id in self.session:
+            del self.session[session_id]
+        return 'success'
