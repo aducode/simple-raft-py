@@ -4,7 +4,7 @@
 
 class Message(object):
     @staticmethod
-    def parse(data):
+    def parse(data, client):
         """
         解析原始字符串信息
         """
@@ -43,6 +43,12 @@ class Message(object):
             return ClientMessage('commit')
         elif data == 'rollback':
             return ClientMessage('rollback')
+        elif data.startswith('#'):
+            # 来自其他节点的消息
+            data=data[1:] #去掉最开始的#
+            if data == 'vote':
+                return VoteMessage(client.getpeername()[0])
+            pass
         else:
             # 暂时忽略其他节点发来的信息
             return InvalidMessage()
@@ -66,6 +72,9 @@ class ClientMessage(Message):
 class NodeMessage(Message):
     pass
 
+class VoteMessage(NodeMessage):
+    def __init__(self, candidate):
+        self.candidate = candidate
 
 class InvalidMessage(Message):
     def __init__(self, msg='invalid message'):

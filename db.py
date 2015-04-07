@@ -41,7 +41,7 @@ class SimpleDB(object):
 
     def delete(self, session_id, key, value=None, auto_commit=False):
         if auto_commit:
-            if  key in self.data:
+            if key in self.data:
                 del self.data[key]
         else:
             logs = self.session[session_id]['logs']

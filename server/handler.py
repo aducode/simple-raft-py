@@ -2,6 +2,7 @@
 # -*- coding:utf-8 -*-
 import hashlib
 
+
 class Handler(object):
     def handle(self, server, client, request):
         pass

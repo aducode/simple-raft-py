@@ -3,6 +3,7 @@
 import socket
 import select
 import time
+import random
 import types
 import Queue
 
@@ -17,6 +18,7 @@ class TimeEvent(object):
         self.time = target_time
         self.args = args
         self.kwargs = kwargs
+        self.rm = False
 
     def invoke(self, excepted_time, real_time):
         self.func(excepted_time, real_time, *self.args, **self.kwargs)
@@ -26,6 +28,7 @@ class IO2Channel(Channel):
     """
     直接与IO关联的Channel
     """
+
     def __init__(self, server, client, next):
         super(IO2Channel, self).__init__(server, client, next)
 
@@ -42,7 +45,7 @@ class IO2Channel(Channel):
                 client_close = True
         if client_close:
             # Interrupt empty result as closed connection
-            #print 'client closing....', self.client.getpeername()
+            # print 'client closing....', self.client.getpeername()
             if self.client in self.server.outputs:
                 self.server.outputs.remove(self.client)
             self.server.inputs.remove(self.client)
@@ -58,10 +61,12 @@ class IO2Channel(Channel):
         if (not response or end) and self.client in self.server.outputs:
             self.server.outputs.remove(self.client)
 
+
 class Channel2Handler(Channel):
     """
     与handler关联起来
     """
+
     def __init__(self, server, client, next):
         super(Channel2Handler, self).__init__(server, client, next)
         self.queue = Queue.Queue()
@@ -111,7 +116,8 @@ class Server(object):
         self.state = 0
 
     def _is_subclass_of(self, subclass, superclass):
-        if not subclass or not superclass or not isinstance(subclass, types.TypeType) or not isinstance(superclass, types.TypeType):
+        if not subclass or not superclass or not isinstance(subclass, types.TypeType) or not isinstance(superclass,
+                                                                                                        types.TypeType):
             return False
         while True:
             if subclass is superclass:
@@ -121,7 +127,9 @@ class Server(object):
             subclass = subclass.__base__
 
     def register_handler(self, handler):
-        if handler and (self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)) or isinstance(handler, Handler):
+        if handler and (
+            self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)) or isinstance(handler,
+                                                                                                             Handler):
             self.handler_class = handler
 
     def register_channel(self, channel):
@@ -188,12 +196,16 @@ class Server(object):
                 # 说明已经过了或者到时间了，需要处理
                 for event in events:
                     event.invoke(t, current)
-                    if event.is_cron:
-                        next_time = event.time + t
+                    if event.is_cron and not event.rm:
+                        if isinstance(event.time, types.TupleType):
+                            next_time = random.uniform(event.time[0], event.time[1]) + t
+                        else:
+                            next_time = event.time + t
                         if next_time not in reset_timers:
                             reset_timers[next_time] = []
                         reset_timers[next_time].append(event)
-                    self.timers[t].remove(event)
+                    if event in self.timers:
+                        self.timers[t].remove(event)
                 # 处理完了，就删除
                 del self.timers[t]
         self.timers.update(reset_timers)
@@ -202,21 +214,28 @@ class Server(object):
                 self.timeout = t - current
                 # print 'next timeout is ', self.timeout
 
-
     def set_timer(self, target_time, is_cron, func, *args, **kwargs):
         """
         设置时间事件
         :param func: 超时事件处理函数 func(except_time, real_time, *args, **kwargs)
         :param target_time: 时间发生的时间
+                            如果是固定的值：
                             如果target_time<current 那么下次执行时间为target_time+current_time 否则为target_time
+                            否则是一个(min, max) tuple类型，表示范围在min-max之内的随机时间
         :param is_cron: 是否是定时任务,执行多次，否则只执行一次
         :return:
         """
         current_time = time.time()
-        if target_time < current_time:
-            real_time = current_time + target_time
+        if isinstance(target_time, types.TupleType):
+            if target_time[0] > target_time[1]:
+                return  #invalide (min, max)
+            _target_time = random.uniform(target_time[0], target_time[1])
         else:
-            real_time = target_time
+            _target_time = target_time
+        if _target_time < current_time:
+            real_time = current_time + _target_time
+        else:
+            real_time = _target_time
         if real_time not in self.timers:
             self.timers[real_time] = []
         self.timers[real_time].append(TimeEvent(func, args, kwargs, target_time, is_cron))
@@ -224,8 +243,8 @@ class Server(object):
     def rm_timer(self, func):
         for events in self.timers.values():
             for event in events:
-                if func is event.func:
-                    events.remove(event)
+                if func == event.func:
+                    event.rm = True
 
     def stop(self):
         if self.state == 0:
