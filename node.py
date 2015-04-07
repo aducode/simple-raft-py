@@ -48,7 +48,7 @@ class Node(object):
                 return self.db.handle(client, message.op, message.key, message.value, message.auto_commit)
             else:
                 #set del commit 操作需要重定位到leader操作
-                return self.leader
+                return self.leader if self.leader else 'None'
         elif isinstance(message, NodeMessage):
             return self.state.handle(message)
         else:

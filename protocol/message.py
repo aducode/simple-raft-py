@@ -20,7 +20,7 @@ class Message(object):
         elif data.startswith('del'):
             auto_commit = False
             if data.endswith(';commit'):
-                auto_commit=True
+                auto_commit = True
                 data = data.split(';')[0]
             tokens = data.split()
             if len(tokens) == 2:
@@ -45,9 +45,11 @@ class Message(object):
             return ClientMessage('rollback')
         elif data.startswith('#'):
             # 来自其他节点的消息
-            data=data[1:] #去掉最开始的#
-            if data == 'vote':
-                return VoteMessage(client.getpeername()[0])
+            data = data[1:]  # 去掉最开始的#
+            if data == 'elect':
+                return ElectMessage(client.getpeername()[0])
+            elif data.startswith('heartbeat'):
+                return HeartbeatMessage(client.getpeername()[0])
             pass
         else:
             # 暂时忽略其他节点发来的信息
@@ -72,9 +74,15 @@ class ClientMessage(Message):
 class NodeMessage(Message):
     pass
 
-class VoteMessage(NodeMessage):
+
+class ElectMessage(NodeMessage):
     def __init__(self, candidate):
         self.candidate = candidate
+
+
+class HeartbeatMessage(NodeMessage):
+    def __init__(self, leader):
+        self.leader = leader
 
 class InvalidMessage(Message):
     def __init__(self, msg='invalid message'):
