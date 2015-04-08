@@ -8,7 +8,7 @@ class Message(object):
         """
         解析原始字符串信息
         """
-        if not data:
+        if data is None:
             return None
         elif data.startswith('get') and ';' not in data:
             # 客户端发来的get操作
@@ -16,7 +16,7 @@ class Message(object):
             if len(tokens) == 2:
                 return ClientMessage('get', tokens[1])
             else:
-                return InvalidMessage()
+                return InvalidMessage('Invalid GET operation format:%s'%data)
         elif data.startswith('del'):
             auto_commit = False
             if data.endswith(';commit'):
@@ -26,7 +26,7 @@ class Message(object):
             if len(tokens) == 2:
                 return ClientMessage('delete', tokens[1], None, auto_commit)
             else:
-                return InvalidMessage()
+                return InvalidMessage('Invalid DEL operation format:%s' % data)
         elif data.startswith('set'):
             # 客户端发来的set操作
             auto_comit = False
@@ -37,14 +37,14 @@ class Message(object):
             if len(tokens) == 3:
                 return ClientMessage('set', tokens[1], tokens[2], auto_comit)
             else:
-                return InvalidMessage()
+                return InvalidMessage('Invalid SET operation format:%s'% data)
         elif data == 'commit':
             # 客户端发来的提交
             return ClientMessage('commit')
         elif data == 'rollback':
             return ClientMessage('rollback')
         elif data.startswith('#'):
-            # 来自其他节点的消息
+            # 来自其他节点的请求消息
             # node message格式
             # #ip:port#msgbody
             # node message需要提供消息来源
@@ -73,10 +73,26 @@ class Message(object):
             elif data.startswith('heartbeat'):
                 return HeartbeatMessage(node_key)
             else:
-                return InvalidMessage()
+                return InvalidMessage('Invalid Node Request Message:%s'% data)
+        elif data.startswith('@'):
+            # 来自其他节点的应答消息
+            # message format
+            #   @msgbody value
+            data = data[1:].strip()
+            if data.startswith('elect'):
+                token = data.split()
+                if not token or len(token)!=2:
+                    return InvalidMessage('Invalid Node Elect Response Message:%s'% data)
+                try:
+                    value = int(token[1])
+                    return ElectResponseMessage(value)
+                except ValueError, e:
+                    return InvalidMessage(e)
+            else:
+                return InvalidMessage('Invalid Response Message:%s' % data)
         else:
             # 暂时忽略其他节点发来的信息
-            return InvalidMessage()
+            return InvalidMessage('Invalild Message:%s' % data)
 
 
 class ClientMessage(Message):
@@ -101,6 +117,11 @@ class NodeMessage(Message):
 class ElectMessage(NodeMessage):
     def __init__(self, candidate):
         self.candidate = candidate
+
+
+class ElectResponseMessage(NodeMessage):
+    def __init__(self, value):
+        self.value = value
 
 
 class HeartbeatMessage(NodeMessage):

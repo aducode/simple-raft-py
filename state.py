@@ -13,14 +13,15 @@ class State(object):
         """
         处理其他node的消息
         """
-        assert isinstance(message, NodeMessage)
-        if isinstance(message, ElectMessage) and not self.voted:
-            self.voted = True
-            return '@elect 1\n'
-        elif isinstance(message, HeartbeatMessage):
-            self.node.leader = HeartbeatMessage.leader
-            return '@elect 1\n'
-        return '@elect 0\n'
+        pass
+        # assert isinstance(message, NodeMessage)
+        # if isinstance(message, ElectMessage) and not self.voted:
+        #     self.voted = True
+        #     return '@elect 1\n'
+        # elif isinstance(message, HeartbeatMessage):
+        #     self.node.leader = HeartbeatMessage.leader
+        #     return '@elect 1\n'
+        # return '@elect 0\n'
 
 
 class Follower(State):
@@ -37,6 +38,16 @@ class Follower(State):
         #print 'election timeout...'
         self.node.state = Candidate(self.node)
 
+    def handle(self, message):
+        assert isinstance(message, NodeMessage)
+        if isinstance(message, ElectMessage) and not self.voted:
+            self.voted = True
+            return '@elect 1\n'
+        elif isinstance(message, HeartbeatMessage):
+            self.node.leader = HeartbeatMessage.leader
+            return '@elect 1\n'
+        return '@elect 0\n'
+
 
 class Candidate(State):
     """
@@ -47,12 +58,23 @@ class Candidate(State):
         super(Candidate, self).__init__(node)
         # voting = Ture 因为Candidate状态的node不会再参与选举
         self.node_count = (len(self.node.neighbors) if self.node.neighbors else 0) + 1
+        self.elect_count = 0
         self.voted = True
         self.node.server.set_timer((0.01, 0.1), False, self._elect)
 
+    def handle(self, message):
+        assert isinstance(message, NodeMessage)
+        if isinstance(message, ElectMessage) and not self.voted:
+            self.voted = True
+            return '@elect 1\n'
+        elif isinstance(message, HeartbeatMessage):
+            self.node.leader = HeartbeatMessage.leader
+            return '@elect 1\n'
+        return '@elect 0\n'
+
     def _elect(self, excepted_time, real_time):
         # count = 1 because it will elect itself
-        count = 1
+        # count = 1
         if self.node.neighbors:
             for follower_addr in self.node.neighbors:
                 elected = 0
@@ -74,13 +96,13 @@ class Candidate(State):
                 # finally:
                 #     if not follower:
                 #         follower.close()
-                count += elected
-        if count >= self.node_count / 2 + 1:
-            print 'elect success! turn to leader!'
-            self.node.state = Leader(self.node)
-        else:
-            print 'elect failed! turn to follower wait next elect'
-            self.node.state = Follower(self.node)
+                # count += elected
+        # if count >= self.node_count / 2 + 1:
+        #     print 'elect success! turn to leader!'
+        #     self.node.state = Leader(self.node)
+        # else:
+        #     print 'elect failed! turn to follower wait next elect'
+        #     self.node.state = Follower(self.node)
 
 
 class Leader(State):

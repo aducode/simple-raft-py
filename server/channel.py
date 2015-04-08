@@ -33,7 +33,9 @@ class LineChannel(Channel):
         self.input_buffer = ''
 
     def input(self, request, recv):
-        if '\n' not in request:
+        if not request:
+            pass
+        elif '\n' not in request:
             self.input_buffer += request
         else:
             msgs = request.split('\n')
@@ -51,4 +53,4 @@ class LineChannel(Channel):
 
     def output(self):
         data, end = self.next.output()
-        return data+'\r\n', end
+        return data+'\r\n' if data else None, end

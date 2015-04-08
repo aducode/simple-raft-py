@@ -13,6 +13,9 @@ class MessageChannel(Channel):
 
     def input(self, data, recv):
         if recv:
+            ###############################
+            # print '[MessageChannel] data:', data
+            ###############################
             message = Message.parse(data, self.client)
         else:
             message = data
@@ -21,7 +24,7 @@ class MessageChannel(Channel):
 
     def output(self):
         response, end = self.next.output()
-        return '%s' % response, end
+        return '%s' % response if response else None, end
 
 
 class NodeHandler(Handler):
@@ -46,12 +49,15 @@ class Node(object):
         self.leader = None
 
     def dispatch(self, server, client, message):
+        ##############################################
+        # print '[dispatch] message:', message
+        ##############################################
         if isinstance(message, ClientMessage):
             if message.op == 'get' or isinstance(self.state, Leader):
                 return self.db.handle(client, message.op, message.key, message.value, message.auto_commit)
             else:
                 #set del commit 操作需要重定位到leader操作
-                return self.leader if self.leader else 'None'
+                return self.leader if self.leader else 'No Leader Elected, please wait until we have a leader...'
         elif isinstance(message, NodeMessage):
             return self.state.handle(message)
         else:

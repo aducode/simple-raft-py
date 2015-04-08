@@ -43,6 +43,12 @@ class IO2Channel(Channel):
             client_close = True
         else:
             if request:
+                ###############################################################
+                # if recv:
+                #     print '[IO2Channel]receive:', request, '\t', self.client.getpeername()
+                # else:
+                #     print '[IO2Channel]send:', request, '\t', self.client.getpeername()
+                ###############################################################
                 self.next.input(request, recv)
             else:
                 client_close = True
@@ -77,14 +83,22 @@ class Channel2Handler(Channel):
     def __init__(self, server, client, next):
         super(Channel2Handler, self).__init__(server, client, next)
         self.queue = Queue.Queue()
+        self.recv = True
 
     def input(self, data, recv):
         response = None
+        self.recv = recv
         if recv:
+            ##################################
+            # print '[Channel2Handler]receiv:', data
+            ##################################
             if isinstance(self.next, Handler):
                 response = self.next.handle(self.server, self.client, data)
             elif isinstance(self.next, types.FunctionType):
                 response = self.next(self.server, self.client, data)
+            ##################################
+                # print '[Channel2Handler]after handle:', response
+            ##################################
         else:
             # 说明直接发出去
             response = data
@@ -95,7 +109,11 @@ class Channel2Handler(Channel):
 
     def output(self):
         try:
-            return self.queue.get_nowait(), self.queue.empty()
+            # o = self.queue.get_nowait()
+            # if self.recv:
+            #     print '------>', o, self.queue.empty() if self.recv else self.recv
+            # return o, self.queue.empty() if self.recv else self.recv
+            return self.queue.get_nowait(), self.queue.empty() if self.recv else self.recv
         except Queue.Empty:
             return None, True
 
@@ -113,7 +131,6 @@ class Server(object):
             subclass = subclass.__base__
 
     def __init__(self, port=2333, host='', **kwargs):
-        self.accepter = None
         self.host = host
         self.port = port
         self.inputs = []
