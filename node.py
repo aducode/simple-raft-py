@@ -11,10 +11,13 @@ class MessageChannel(Channel):
     def __init__(self, server, client, next):
         super(MessageChannel, self).__init__(server, client, next)
 
-    def input(self, data):
-        message = Message.parse(data, self.client)
+    def input(self, data, recv):
+        if recv:
+            message = Message.parse(data, self.client)
+        else:
+            message = data
         if message:
-            return self.next.input(message)
+            return self.next.input(message, recv)
 
     def output(self):
         response, end = self.next.output()
@@ -30,7 +33,8 @@ class NodeHandler(Handler):
 
 
 class Node(object):
-    def __init__(self, port, neighbors=None, db=None):
+    def __init__(self, host, port, neighbors=None, db=None):
+        self.host = host
         self.port = port
         self.neighbors = neighbors
         self.db = db if db else SimpleDB()
@@ -42,7 +46,6 @@ class Node(object):
         self.leader = None
 
     def dispatch(self, server, client, message):
-        # print message
         if isinstance(message, ClientMessage):
             if message.op == 'get' or isinstance(self.state, Leader):
                 return self.db.handle(client, message.op, message.key, message.value, message.auto_commit)
@@ -54,26 +57,37 @@ class Node(object):
         else:
             return message
 
+    @property
+    def node_key(self):
+        # 这里不能用getsockname 会返回0.0.0.0
+        # return self.server.accepter.getsockname()
+        return (self.host, self.port)
+
     def start(self):
         self.server.server_forever()
 
 
 if __name__ == '__main__':
     import sys
+    host = '127.0.0.1'
     port = 2333
     nei = None
     neighbors = None
     try:
-        port = int(sys.argv[1])
+        host = sys.argv[1]
     except:
-        pass
+        sys.exit(1)
     try:
-        nei = sys.argv[2:]
+        port = int(sys.argv[2])
     except:
-        pass
-    if nei and len(nei) % 2 == 0:
-        neighbors = []
-        for i in xrange(0, len(nei), 2):
-            neighbors.append((nei[i], nei[i+1]))
-    node = Node(port, neighbors)
+        sys.exit(1)
+    try:
+        nei = sys.argv[3:]
+        if nei and len(nei) % 2 == 0:
+            neighbors = []
+            for i in xrange(0, len(nei), 2):
+                neighbors.append((nei[i], int(nei[i+1])))
+    except:
+        sys.exit(1)
+    node = Node(host, port, neighbors)
     node.start()

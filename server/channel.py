@@ -11,7 +11,12 @@ class Channel(object):
         self.client = client
         self.next = next
 
-    def input(self, data):
+    def input(self, data, recv):
+        """
+        :param data 数据
+        :param recv 是否从socket接受来的消息
+                    当为False时，说明数据是发送到其他server的，不是server接受来的
+        """
         pass
 
     def output(self):
@@ -27,7 +32,7 @@ class LineChannel(Channel):
         super(LineChannel, self).__init__(server, client, next)
         self.input_buffer = ''
 
-    def input(self, request):
+    def input(self, request, recv):
         if '\n' not in request:
             self.input_buffer += request
         else:
@@ -35,11 +40,11 @@ class LineChannel(Channel):
             msg = (self.input_buffer + msgs[0]).strip()
             if msg:
                 self.input_buffer = ''
-                self.next.input(msg)
+                self.next.input(msg, recv)
             for msg in msgs[1:-1]:
                 msg = msg.strip()
                 if msg:
-                    self.next.input(msg)
+                    self.next.input(msg, recv)
             msg = msgs[-1]
             if msg:
                 self.input_buffer = msg.strip()

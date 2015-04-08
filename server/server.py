@@ -32,32 +32,39 @@ class IO2Channel(Channel):
     def __init__(self, server, client, next):
         super(IO2Channel, self).__init__(server, client, next)
 
-    def input(self, data=None):
+    def input(self, data=None, recv=True):
         client_close = False
         try:
-            request = self.client.recv(1024)
+            if recv:
+                request = self.client.recv(1024)
+            else:
+                request = data
         except Exception:
             client_close = True
         else:
             if request:
-                self.next.input(request)
+                self.next.input(request, recv)
             else:
                 client_close = True
         if client_close:
+            self.server.close(self.client)
             # Interrupt empty result as closed connection
             # print 'client closing....', self.client.getpeername()
-            if self.client in self.server.outputs:
-                self.server.outputs.remove(self.client)
-            self.server.inputs.remove(self.client)
-            self.client.close()
-            # remove message queue
-            del self.server.context[self.client]
-
+            # if self.client in self.server.outputs:
+            #     self.server.outputs.remove(self.client)
+            # self.server.inputs.remove(self.client)
+            # self.client.close()
+            # # remove message queue
+            # del self.server.context[self.client]
 
     def output(self):
         response, end = self.next.output()
         if response:
-            self.client.send(response)
+            try:
+                self.client.send(response)
+            except IOError, e:
+                # close
+                self.server.close(self.client)
         if (not response or end) and self.client in self.server.outputs:
             self.server.outputs.remove(self.client)
 
@@ -71,12 +78,16 @@ class Channel2Handler(Channel):
         super(Channel2Handler, self).__init__(server, client, next)
         self.queue = Queue.Queue()
 
-    def input(self, data):
+    def input(self, data, recv):
         response = None
-        if isinstance(self.next, Handler):
-            response = self.next.handle(self.server, self.client, data)
-        elif isinstance(self.next, types.FunctionType):
-            response = self.next(self.server, self.client, data)
+        if recv:
+            if isinstance(self.next, Handler):
+                response = self.next.handle(self.server, self.client, data)
+            elif isinstance(self.next, types.FunctionType):
+                response = self.next(self.server, self.client, data)
+        else:
+            # 说明直接发出去
+            response = data
         if response:
             self.queue.put(response)
             if self.client not in self.server.outputs:
@@ -90,13 +101,26 @@ class Channel2Handler(Channel):
 
 
 class Server(object):
+    def _is_subclass_of(self, subclass, superclass):
+        if not subclass or not superclass or not isinstance(subclass, types.TypeType) or not isinstance(superclass,
+                                                                                                        types.TypeType):
+            return False
+        while True:
+            if subclass is superclass:
+                return True
+            elif subclass is object:
+                return False
+            subclass = subclass.__base__
+
     def __init__(self, port=2333, host='', **kwargs):
+        self.accepter = None
         self.host = host
         self.port = port
         self.inputs = []
         self.outputs = []
         self.exceptions = []
         self.context = {}
+        self.connect_pool = {}
         self.channel_class = None
         if 'handler' in kwargs and isinstance(kwargs['handler'], (Handler, types.FunctionType)):
             self.handler_class = kwargs['handler']
@@ -115,21 +139,11 @@ class Server(object):
         # 0 running 1 stopping 2 stopped
         self.state = 0
 
-    def _is_subclass_of(self, subclass, superclass):
-        if not subclass or not superclass or not isinstance(subclass, types.TypeType) or not isinstance(superclass,
-                                                                                                        types.TypeType):
-            return False
-        while True:
-            if subclass is superclass:
-                return True
-            elif subclass is object:
-                return False
-            subclass = subclass.__base__
-
     def register_handler(self, handler):
         if handler and (
-            self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)) or isinstance(handler,
-                                                                                                             Handler):
+                    self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)) or isinstance(
+                handler,
+                Handler):
             self.handler_class = handler
 
     def register_channel(self, channel):
@@ -154,6 +168,7 @@ class Server(object):
         if self.channel_class:
             for claz in self.channel_class[::-1]:
                 c = claz(self, client, c)
+        # IO2Channel在链的最前面
         c = IO2Channel(self, client, c)
         return c
 
@@ -228,7 +243,7 @@ class Server(object):
         current_time = time.time()
         if isinstance(target_time, types.TupleType):
             if target_time[0] > target_time[1]:
-                return  #invalide (min, max)
+                return  # invalide (min, max)
             _target_time = random.uniform(target_time[0], target_time[1])
         else:
             _target_time = target_time
@@ -245,6 +260,45 @@ class Server(object):
             for event in events:
                 if func == event.func:
                     event.rm = True
+
+    def connect(self, addr):
+        """
+        主动连接
+        :param addr: (ip, port)
+        :return: client
+        """
+        if addr not in self.connect_pool:
+            client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client.connect(addr)
+            client.setblocking(False)
+            self.connect_pool[addr] = client
+        else:
+            client = self.connect_pool[addr]
+        # self.outputs.append(client)
+        self.context[client] = self.get_channel(client)
+        return self.context[client]
+
+    def close(self, client):
+        """
+        关闭client连接
+        :param client:
+        :return:
+        """
+        addr = client.getpeername()
+        if addr in self.connect_pool:
+            del self.connect_pool[addr]
+        if client in self.context:
+            del self.context[client]
+        if client in self.inputs:
+            self.inputs.remove(client)
+        if client in self.outputs:
+            self.outputs.remove(client)
+        if client in self.exceptions:
+            self.exceptions.remove(client)
+        try:
+            client.close()
+        except IOError, e:
+            print e
 
     def stop(self):
         if self.state == 0:
