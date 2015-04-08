@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from protocol.message import NodeMessage, ElectMessage, HeartbeatMessage
+from protocol.message import NodeMessage, ElectMessage, HeartbeatMessage, ElectResponseMessage
 import socket
 
 
@@ -42,11 +42,11 @@ class Follower(State):
         assert isinstance(message, NodeMessage)
         if isinstance(message, ElectMessage) and not self.voted:
             self.voted = True
-            return '@elect 1\n'
+            return '@elect 1'
         elif isinstance(message, HeartbeatMessage):
             self.node.leader = HeartbeatMessage.leader
-            return '@elect 1\n'
-        return '@elect 0\n'
+            return '@elect 1'
+        return '@elect 0'
 
 
 class Candidate(State):
@@ -59,40 +59,50 @@ class Candidate(State):
         # voting = Ture 因为Candidate状态的node不会再参与选举
         self.node_count = (len(self.node.neighbors) if self.node.neighbors else 0) + 1
         self.elect_count = 0
+        self.node_cache = {}
         self.voted = True
         self.node.server.set_timer((0.01, 0.1), False, self._elect)
 
     def handle(self, message):
+        ##########################################
+        print 'Candidate handle:', message
+        ##########################################
         assert isinstance(message, NodeMessage)
         if isinstance(message, ElectMessage) and not self.voted:
             self.voted = True
-            return '@elect 1\n'
+            return '@elect 1'
         elif isinstance(message, HeartbeatMessage):
             self.node.leader = HeartbeatMessage.leader
-            return '@elect 1\n'
-        return '@elect 0\n'
+            return '@elect 1'
+        elif isinstance(message, ElectResponseMessage):
+            self.elect_count += message.value
+            if len(self.node_cache) == self.node_count:
+                if self.elect_count > self.node_count/2:
+                    print '###############I\'m the leader'
+        return '@elect 0'
 
     def _elect(self, excepted_time, real_time):
         # count = 1 because it will elect itself
         # count = 1
         if self.node.neighbors:
             for follower_addr in self.node.neighbors:
-                elected = 0
-                try:
-                    follower = self.node.server.connect(follower_addr)
-                    # follower = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    # follower.connect(follower_addr)
-                    # 这里一定要加\n，否则LineChannel会一直缓存消息，不会交给MessageChannel处理
-                    # follower.send('#%s:%d#elect\n' % self.node.node_key)
-                    follower.input('#%s:%d#elect\n' % self.node.node_key, False)
-                    # 这里会出现死锁
-                    # 由于node作为client端，发送消息时，使用的是阻塞socket，那么在recv时就会阻塞，导致timeout event handler阻塞
-                    # 从而不能再main loop中进行下一轮IO handler
-                    # client也使用多路IO复用，这里只管send，recv在handler里进行
-                    # elected = int(follower.recv(1024))
-                except IOError, e:
-                    #print e, 'Connect %s fail...' % (follower_addr,)
-                    pass
+                if follower_addr not in self.node_cache:
+                    try:
+                        follower = self.node.server.connect(follower_addr)
+                        # follower = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        # follower.connect(follower_addr)
+                        # 这里一定要加\n，否则LineChannel会一直缓存消息，不会交给MessageChannel处理
+                        # follower.send('#%s:%d#elect\n' % self.node.node_key)
+                        follower.input('#%s:%d#elect\n' % self.node.node_key, False)
+                        self.node_cache[follower_addr] = 1
+                        # 这里会出现死锁
+                        # 由于node作为client端，发送消息时，使用的是阻塞socket，那么在recv时就会阻塞，导致timeout event handler阻塞
+                        # 从而不能再main loop中进行下一轮IO handler
+                        # client也使用多路IO复用，这里只管send，recv在handler里进行
+                        # elected = int(follower.recv(1024))
+                    except IOError, e:
+                        #print e, 'Connect %s fail...' % (follower_addr,)
+                        pass
                 # finally:
                 #     if not follower:
                 #         follower.close()

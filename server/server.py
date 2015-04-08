@@ -44,10 +44,11 @@ class IO2Channel(Channel):
         else:
             if request:
                 ###############################################################
-                # if recv:
-                #     print '[IO2Channel]receive:', request, '\t', self.client.getpeername()
-                # else:
-                #     print '[IO2Channel]send:', request, '\t', self.client.getpeername()
+                if recv:
+                    print '[IO2Channel]receive:', request, '\t', self.client.getpeername()
+                else:
+                    print '[IO2Channel]send:', request, '\t', self.client.getpeername()
+                print self.client.getpeername()
                 ###############################################################
                 self.next.input(request, recv)
             else:
@@ -65,11 +66,22 @@ class IO2Channel(Channel):
 
     def output(self):
         response, end = self.next.output()
+        ##########################################
+        print '[IO2Channel] output:', response, end
+        print 'client:', self.client.getpeername()
+        ##########################################
         if response:
             try:
-                self.client.send(response)
-            except IOError, e:
+                #################################################
+                print self.client.getpeername(), 'send:', response
+                ##################################################
+                count = self.client.send(response)
+                ##################################################
+                print 'sended %d count' % count
+                ##################################################
+            except (IOError, socket.error), e:
                 # close
+                print e
                 self.server.close(self.client)
         if (not response or end) and self.client in self.server.outputs:
             self.server.outputs.remove(self.client)
@@ -113,7 +125,7 @@ class Channel2Handler(Channel):
             # if self.recv:
             #     print '------>', o, self.queue.empty() if self.recv else self.recv
             # return o, self.queue.empty() if self.recv else self.recv
-            return self.queue.get_nowait(), self.queue.empty() if self.recv else self.recv
+            return self.queue.get_nowait(), self.queue.empty()# if self.recv else self.recv
         except Queue.Empty:
             return None, True
 
@@ -288,11 +300,14 @@ class Server(object):
             client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             client.connect(addr)
             client.setblocking(False)
+            self.inputs.append(client)
             self.connect_pool[addr] = client
         else:
             client = self.connect_pool[addr]
         # self.outputs.append(client)
         self.context[client] = self.get_channel(client)
+        # if client not in self.inputs:
+        #     self.inputs.append(client)
         return self.context[client]
 
     def close(self, client):

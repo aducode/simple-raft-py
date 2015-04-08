@@ -53,4 +53,4 @@ class LineChannel(Channel):
 
     def output(self):
         data, end = self.next.output()
-        return data+'\r\n' if data else None, end
+        return data+'\n' if data else None, end
