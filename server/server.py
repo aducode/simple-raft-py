@@ -44,11 +44,11 @@ class IO2Channel(Channel):
         else:
             if request:
                 ###############################################################
-                if recv:
-                    print '[IO2Channel]receive:', request, '\t', self.client.getpeername()
-                else:
-                    print '[IO2Channel]send:', request, '\t', self.client.getpeername()
-                print self.client.getpeername()
+                # if recv:
+                #     print '[IO2Channel]receive:', request, '\t', self.client.getpeername()
+                # else:
+                #     print '[IO2Channel]send:', request, '\t', self.client.getpeername()
+                # print self.client.getpeername()
                 ###############################################################
                 self.next.input(request, recv)
             else:
@@ -67,17 +67,17 @@ class IO2Channel(Channel):
     def output(self):
         response, end = self.next.output()
         ##########################################
-        print '[IO2Channel] output:', response, end
-        print 'client:', self.client.getpeername()
+        # print '[IO2Channel] output:', response, end
+        # print 'client:', self.client.getpeername()
         ##########################################
         if response:
             try:
                 #################################################
-                print self.client.getpeername(), 'send:', response
+                # print self.client.getpeername(), 'send:', response
                 ##################################################
                 count = self.client.send(response)
                 ##################################################
-                print 'sended %d count' % count
+                # print 'sended %d count' % count
                 ##################################################
             except (IOError, socket.error), e:
                 # close
@@ -218,9 +218,15 @@ class Server(object):
                 self.context[connection] = self.get_channel(connection)
             else:
                 # readable from other system
-                self.context[r].input()
+                try:
+                    self.context[r].input()
+                except KeyError:
+                    print '[%s] removed .' % r
         for w in writable:
-            self.context[w].output()
+            try:
+                self.context[w].output()
+            except KeyError:
+                print '[%s] removed.' % w
         for e in exceptional:
             # print 'exception condition on ', e.getpeername()
             self.inputs.remove(e)
@@ -302,13 +308,13 @@ class Server(object):
             client.setblocking(False)
             self.inputs.append(client)
             self.connect_pool[addr] = client
+            self.context[client] = self.get_channel(client)
         else:
             client = self.connect_pool[addr]
         # self.outputs.append(client)
-        self.context[client] = self.get_channel(client)
         # if client not in self.inputs:
         #     self.inputs.append(client)
-        return self.context[client]
+        return client, self.context.get(client, None)
 
     def close(self, client):
         """

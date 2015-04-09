@@ -77,15 +77,29 @@ class Message(object):
         elif data.startswith('@'):
             # 来自其他节点的应答消息
             # message format
-            #   @msgbody value
+            #   @ip:port@msgbody value
             data = data[1:].strip()
+            token = data.split('@')
+            if not token or len(token)<2:
+                return InvalidMessage('Invalid Node Response Message Format')
+            source = token[0]
+            ip_port = source.split(':')
+            if not ip_port or len(ip_port) != 2:
+                return InvalidMessage('Invalid source ip:port format:%s' % ip_port)
+            ip = ip_port[0]
+            try:
+                port = int(ip_port[1])
+            except:
+                return InvalidMessage('Invalid port:%s' % ip_port[1])
+            node_key=(ip, port)
+            data = token[1].strip()
             if data.startswith('elect'):
                 token = data.split()
                 if not token or len(token)!=2:
                     return InvalidMessage('Invalid Node Elect Response Message:%s'% data)
                 try:
                     value = int(token[1])
-                    return ElectResponseMessage(value)
+                    return ElectResponseMessage(node_key, value)
                 except ValueError, e:
                     return InvalidMessage(e)
             else:
@@ -120,7 +134,8 @@ class ElectMessage(NodeMessage):
 
 
 class ElectResponseMessage(NodeMessage):
-    def __init__(self, value):
+    def __init__(self, node_key, value):
+        self.node_key = node_key
         self.value = value
 
 
