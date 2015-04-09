@@ -32,10 +32,11 @@ class Follower(State):
     def __init__(self, node):
         super(Follower, self).__init__(node)
         self.voted = False
-        self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
+        self.node.server.set_timer((1.5, 3), False, self._election_timeout)
 
 
     def _election_timeout(self, excepted_time, real_time):
+        print '###################### election timeout ....'
         if not self.voted and not self.node.leader:
             print '[%.3f]election timeout ... turn to Candidate!' % real_time
             # 转变状态之前去掉选举超时
@@ -52,9 +53,11 @@ class Follower(State):
                 return '@%s:%d@elect 0' % self.node.node_key
         elif isinstance(message, HeartbeatMessage):
             self.node.leader = message.leader
+            # 这里有问题， Follower 到 Candidate状态转变的超时时间即使从新设置了，超时处理函数也会每次执行
+            #TODO fix
             self.node.server.rm_timer(self._election_timeout)
-            # print 'Find leader %s so I must reset candidate timeout....' % (self.node.leader, )
-            self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
+            print 'Find leader %s so I must reset candidate timeout....' % (self.node.leader, )
+            self.node.server.set_timer((1.5, 3), False, self._election_timeout)
             # print 'FIND leader:%s' % (self.node.leader, )
 
 
