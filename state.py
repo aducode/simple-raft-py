@@ -36,9 +36,10 @@ class Follower(State):
 
 
     def _election_timeout(self, excepted_time, real_time):
-        # print 'election timeout...'
-        if not self.voted:
+        if not self.voted and not self.node.leader:
             print '[%.3f]election timeout ... turn to Candidate!' % real_time
+            # 转变状态之前去掉选举超时
+            # self.node.server.rm_timer(self._election_timeout)
             self.node.state = Candidate(self.node)
 
     def handle(self, message):
@@ -50,7 +51,11 @@ class Follower(State):
             else:
                 return '@%s:%d@elect 0' % self.node.node_key
         elif isinstance(message, HeartbeatMessage):
-            self.node.leader = HeartbeatMessage.leader
+            self.node.leader = message.leader
+            self.node.server.rm_timer(self._election_timeout)
+            # print 'Find leader %s so I must reset candidate timeout....' % (self.node.leader, )
+            self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
+            # print 'FIND leader:%s' % (self.node.leader, )
 
 
 class Candidate(State):
@@ -74,7 +79,10 @@ class Candidate(State):
         if isinstance(message, ElectMessage):
             return '@%s:%d@elect 0' % self.node.node_key
         elif isinstance(message, HeartbeatMessage):
-            self.node.leader = HeartbeatMessage.leader
+            self.node.leader = message.leader
+            print 'FIND leader:%s' % (self.node.leader, )
+            self.node.server.rm_timer(self._elect)
+            self.node.state = Follower(self.node)
         elif isinstance(message, ElectResponseMessage):
             self.elect_count += message.value
             self.node_cache[message.node_key] = message.value
@@ -121,8 +129,10 @@ class Candidate(State):
                 elect_complite = False
                 break
         if len(self.node_cache) == self.node_count and elect_complite:
+            self.node.server.rm_timer(self._elect)
             if self.elect_count > self.node_count / 2:
-                print 'I\'m the leader'
+                print 'I\'m the leader:%s' % (self.node.node_key,)
+                self.node.leader = self.node.node_key
                 self.node.state = Leader(self.node)
             else:
                 print 'Elect fail ,turn to follower'
@@ -155,12 +165,9 @@ class Leader(State):
         if self.node.neighbors:
             for follower_addr in self.node.neighbors:
                 try:
-                    follower = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    follower.connect(follower_addr)
-                    follower.send('#heartbeat')
-                    if int(follower.recv(1024)) == 1:
-                        self.alive.append(follower_addr)
-                    follower.close()
+                    sock, follower = self.node.server.connect(follower_addr)
+                    #follower.send('#%s:%d#heartbeat\n' % self.node.node_key)
+                    follower.input('#%s:%d#heartbeat\n' % self.node.node_key, False)
                 except:
                     pass
         else:

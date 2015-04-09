@@ -24,7 +24,7 @@ class MessageChannel(Channel):
 
     def output(self):
         response, end = self.next.output()
-        return '%s' % response if response else None, end
+        return '%s' % (response, ) if response else None, end
 
 
 class NodeHandler(Handler):
@@ -57,7 +57,7 @@ class Node(object):
                 return self.db.handle(client, message.op, message.key, message.value, message.auto_commit)
             else:
                 #set del commit 操作需要重定位到leader操作
-                return self.leader if self.leader else 'No Leader Elected, please wait until we have a leader...'
+                return '@%s:%d@redirect' % self.leader if self.leader else 'No Leader Elected, please wait until we have a leader...'
         elif isinstance(message, NodeMessage):
             return self.state.handle(message)
         else:
