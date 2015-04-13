@@ -82,11 +82,11 @@ if __name__ == '__main__':
     try:
         host = sys.argv[1]
     except:
-        sys.exit(1)
+        pass
     try:
         port = int(sys.argv[2])
     except:
-        sys.exit(1)
+        pass
     try:
         nei = sys.argv[3:]
         if nei and len(nei) % 2 == 0:
