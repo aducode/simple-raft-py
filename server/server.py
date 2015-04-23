@@ -206,7 +206,7 @@ class Server(object):
 
     def handle_io_event(self):
         # print 'waiting for next event'
-        readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions, self.timeout)
+        readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions, self._get_timeout())
         for r in readable:
             if r is self.accepter:
                 # A readable socket is ready to accept  a connection
@@ -235,18 +235,37 @@ class Server(object):
             e.close()
             del self.context[e]
 
+    def _get_timeout(self):
+        """
+        获取select的超时时间
+        根据timeevent队列到目前为止的最小时间就算
+        :return:
+        """
+        current = time.time()
+        ret = 1000 #default timeout 1s
+        if not self.timers:
+            # 如果没有超时事件，那么就不超时
+            return ret
+        for t in self.timers:
+            timeout = t - current
+            if timeout > 0:
+                if not ret or timeout < ret:
+                    # 找到最近过期时间
+                    ret = timeout
+        return ret
+
     def handle_timeout_event(self):
         # print 'handle the timers ...'
         current = time.time()
         reset_timers = {}
         # 计算下次循环的select 超时时间
-        self.timeout = None
         for t, events in self.timers.items():
             if t <= current and self.is_running():
                 # 说明已经过了或者到时间了，需要处理
                 for event in events:
-                    event.invoke(t, current)
-                    if event.is_cron and not event.rm:
+                    if not event.rm:
+                        event.invoke(t, current)
+                    if event.is_cron and not event.rm: #需要再次判断，因为可能在event.invoke的时候调用rm_timer
                         if isinstance(event.time, types.TupleType):
                             next_time = random.uniform(event.time[0], event.time[1]) + t
                         else:
@@ -254,14 +273,15 @@ class Server(object):
                         if next_time not in reset_timers:
                             reset_timers[next_time] = []
                         reset_timers[next_time].append(event)
-                    if event in self.timers:
+                    if event in self.timers[t]:
                         self.timers[t].remove(event)
                 # 处理完了，就删除
                 del self.timers[t]
         self.timers.update(reset_timers)
-        for t in self.timers:
-            if not self.timeout or (t > current and t - current < self.timeout):
-                self.timeout = t - current
+        # 重新计算select的超时时间
+        # for t in self.timers:
+        #     if not self.timeout or (t > current and t - current < self.timeout):
+        #         self.timeout = t - current
                 # print 'next timeout is ', self.timeout
 
     def set_timer(self, target_time, is_cron, func, *args, **kwargs):
@@ -288,9 +308,15 @@ class Server(object):
             real_time = _target_time
         if real_time not in self.timers:
             self.timers[real_time] = []
-        self.timers[real_time].append(TimeEvent(func, args, kwargs, target_time, is_cron))
+        event = TimeEvent(func, args, kwargs, target_time, is_cron)
+        self.timers[real_time].append(event)
 
     def rm_timer(self, func):
+        """
+        删除相对应的TimeEvent
+        :param func:
+        :return:
+        """
         for events in self.timers.values():
             for event in events:
                 if func == event.func:
@@ -402,12 +428,12 @@ class Server(object):
         self.accepter.listen(10)
         self.inputs.append(self.accepter)
         # 计算超时时间
-        self.timeout = None
-        current = time.time()
-        for t in self.timers:
-            timeout = t - current
-            if not self.timeout or (timeout > 0 and timeout < self.timeout):
-                self.timeout = timeout
+        # self.timeout = None
+        # current = time.time()
+        # for t in self.timers:
+        #     timeout = t - current
+        #     if not self.timeout or (timeout > 0 and timeout < self.timeout):
+        #         self.timeout = timeout
         # set state
         self.state = 0
 

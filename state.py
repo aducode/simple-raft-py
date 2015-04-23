@@ -32,11 +32,15 @@ class Follower(State):
     def __init__(self, node):
         super(Follower, self).__init__(node)
         self.voted = False
-        self.node.server.set_timer((1.5, 3), False, self._election_timeout)
-
+        self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
 
     def _election_timeout(self, excepted_time, real_time):
         print '###################### election timeout ....'
+        if self.node.leader:
+            # 之前已经产生了leader，但是还超时了，说明leader挂了
+            self.node.leader = None
+            self.voted = False
+
         if not self.voted and not self.node.leader:
             print '[%.3f]election timeout ... turn to Candidate!' % real_time
             # 转变状态之前去掉选举超时
@@ -52,13 +56,17 @@ class Follower(State):
             else:
                 return '@%s:%d@elect 0' % self.node.node_key
         elif isinstance(message, HeartbeatMessage):
+            ##############################
+            print 'Heartbeat:', message
+            ##############################
             self.node.leader = message.leader
             # 这里有问题， Follower 到 Candidate状态转变的超时时间即使从新设置了，超时处理函数也会每次执行
+            # 找到原因了，心跳的0.15秒一次，每次收到心跳都要设置一个TimeOutEvent,可能在同一时间出现多个event
             #TODO fix
             self.node.server.rm_timer(self._election_timeout)
             print 'Find leader %s so I must reset candidate timeout....' % (self.node.leader, )
-            self.node.server.set_timer((1.5, 3), False, self._election_timeout)
-            # print 'FIND leader:%s' % (self.node.leader, )
+            # print 'Now do not reset the timeout handler'
+            self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
 
 
 class Candidate(State):
@@ -72,7 +80,7 @@ class Candidate(State):
         self.node_count = (len(self.node.neighbors) if self.node.neighbors else 0) + 1
         self.elect_count = 1
         self.node_cache = {self.node.node_key: 1}
-        self.node.server.set_timer((0.01, 0.1), True, self._elect)
+        self.node.server.set_timer((0.01, 0.05), True, self._elect)
 
     def handle(self, message):
         # #########################################
@@ -161,7 +169,7 @@ class Leader(State):
         super(Leader, self).__init__(node)
         self.buffer = []
         self.alive = []
-        self.node.server.set_timer(0.15, True, self._heartbeat)
+        self.node.server.set_timer(0.1, True, self._heartbeat)
 
     def _heartbeat(self, excepted_time, real_time):
         del self.alive[:]
