@@ -242,7 +242,7 @@ class Server(object):
         :return:
         """
         current = time.time()
-        ret = 1000 #default timeout 1s
+        ret = 1 #default timeout 1s
         if not self.timers:
             # 如果没有超时事件，那么就不超时
             return ret
@@ -273,6 +273,8 @@ class Server(object):
                         if next_time not in reset_timers:
                             reset_timers[next_time] = []
                         reset_timers[next_time].append(event)
+                    if not event.is_cron and not event.rm:
+                        event.rm = True
                     if event in self.timers[t]:
                         self.timers[t].remove(event)
                 # 处理完了，就删除

@@ -4,7 +4,7 @@ from server import Server, Handler
 from server import Channel, LineChannel
 from state import Follower, Leader
 from protocol.message import Message, ClientMessage, NodeMessage
-from db import SimpleDB
+from config import Config
 
 
 class MessageChannel(Channel):
@@ -36,12 +36,14 @@ class NodeHandler(Handler):
 
 
 class Node(object):
-    def __init__(self, host, port, neighbors=None, db=None):
-        self.host = host
-        self.port = port
-        self.neighbors = neighbors
-        self.db = db if db else SimpleDB()
-        self.server = Server(self.port)
+    def __init__(self, _config):
+        self.config = _config
+        """
+        node中的neighbors是动态的
+        config中的neighbors是静态的
+        """
+        self.neighbors = self.config.neighbors
+        self.server = Server(self.config.port)
         self.server.register_channel(LineChannel)
         self.server.register_channel(MessageChannel)
         self.server.register_handler(NodeHandler(self))
@@ -54,7 +56,7 @@ class Node(object):
         ##############################################
         if isinstance(message, ClientMessage):
             if message.op == 'get' or isinstance(self.state, Leader):
-                return self.db.handle(client, message.op, message.key, message.value, message.auto_commit)
+                return self.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
             else:
                 #set del commit 操作需要重定位到leader操作
                 return '@%s:%d@redirect' % self.leader if self.leader else 'No Leader Elected, please wait until we have a leader...'
@@ -67,7 +69,7 @@ class Node(object):
     def node_key(self):
         # 这里不能用getsockname 会返回0.0.0.0
         # return self.server.accepter.getsockname()
-        return (self.host, self.port)
+        return self.config.host, self.config.port
 
     def start(self):
         self.server.server_forever()
@@ -95,5 +97,5 @@ if __name__ == '__main__':
                 neighbors.append((nei[i], int(nei[i+1])))
     except:
         sys.exit(1)
-    node = Node(host, port, neighbors)
+    node = Node(Config(host, port, neighbors=neighbors))
     node.start()

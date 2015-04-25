@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
 from protocol.message import NodeMessage, ElectMessage, HeartbeatMessage, ElectResponseMessage
-import socket
 
 
 class State(object):
@@ -38,6 +37,10 @@ class Follower(State):
         print '###################### election timeout ....'
         if self.node.leader:
             # 之前已经产生了leader，但是还超时了，说明leader挂了
+            # 挂了的节点，需要摘除
+            print self.node.leader
+            self.node.neighbors.remove(self.node.leader)
+            # 但是要考虑重连回复neighbors列表，所以这个列表是动态的
             self.node.leader = None
             self.voted = False
 
@@ -56,15 +59,8 @@ class Follower(State):
             else:
                 return '@%s:%d@elect 0' % self.node.node_key
         elif isinstance(message, HeartbeatMessage):
-            ##############################
-            print 'Heartbeat:', message
-            ##############################
             self.node.leader = message.leader
-            # 这里有问题， Follower 到 Candidate状态转变的超时时间即使从新设置了，超时处理函数也会每次执行
-            # 找到原因了，心跳的0.15秒一次，每次收到心跳都要设置一个TimeOutEvent,可能在同一时间出现多个event
-            #TODO fix
             self.node.server.rm_timer(self._election_timeout)
-            print 'Find leader %s so I must reset candidate timeout....' % (self.node.leader, )
             # print 'Now do not reset the timeout handler'
             self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
 
@@ -76,11 +72,10 @@ class Candidate(State):
 
     def __init__(self, node):
         super(Candidate, self).__init__(node)
-        # voting = Ture 因为Candidate状态的node不会再参与选举
         self.node_count = (len(self.node.neighbors) if self.node.neighbors else 0) + 1
         self.elect_count = 1
-        self.node_cache = {self.node.node_key: 1}
-        self.node.server.set_timer((0.01, 0.05), True, self._elect)
+        self.node_cache = {}
+        self.node.server.set_timer((0.01, 0.05), True, self._elect_other_node)
 
     def handle(self, message):
         # #########################################
@@ -92,21 +87,16 @@ class Candidate(State):
         elif isinstance(message, HeartbeatMessage):
             self.node.leader = message.leader
             print 'FIND leader:%s' % (self.node.leader, )
-            self.node.server.rm_timer(self._elect)
+            self.node.server.rm_timer(self._elect_other_node)
             self.node.state = Follower(self.node)
         elif isinstance(message, ElectResponseMessage):
             self.elect_count += message.value
             self.node_cache[message.node_key] = message.value
-            # if len(self.node_cache) == self.node_count:
-            #     # wait for next elect
-            #     self.node_cache.clear()
-            #     if self.elect_count > self.node_count/2:
-            #         print '###############I\'m the leader'
-            #     else:
-            #         print 'elect fail wait for next elect'
-            # return '@elect 0'
 
-    def _elect(self, excepted_time, real_time):
+    def _elect_other_node(self, excepted_time, real_time):
+        """
+        选举其他的节点
+        """
         # count = 1 because it will elect itself
         # count = 1
         if self.node.neighbors:
@@ -130,6 +120,14 @@ class Candidate(State):
                     # elected = int(follower.recv(1024))
                 except IOError, e:
                     print e, 'Connect %s fail...' % (follower_addr,)
+            # 向全部neighbors node发出elect request之后，也向自己发出elect request
+            # 这里就用timeout event代替了
+            # 选择自己
+            if self.node_cache.get(self.node.node_key, -1) == -1:
+                self.node.server.set_timer((0.01, 0.2), False, self._elect_itself)
+        else:
+            # 单节点，直接选举自己
+            self.node_cache[self.node.node_key] = 1
         print '===============================\nElect result:'
         for k, v in self.node_cache.items():
             print '\t', k, '\t', v
@@ -140,7 +138,7 @@ class Candidate(State):
                 elect_complite = False
                 break
         if len(self.node_cache) == self.node_count and elect_complite:
-            self.node.server.rm_timer(self._elect)
+            self.node.server.rm_timer(self._elect_other_node)
             if self.elect_count > self.node_count / 2:
                 print 'I\'m the leader:%s' % (self.node.node_key,)
                 self.node.leader = self.node.node_key
@@ -159,6 +157,11 @@ class Candidate(State):
                 #     print 'elect failed! turn to follower wait next elect'
                 #     self.node.state = Follower(self.node)
 
+    def _elect_itself(self, excepted_time, real_time):
+        """
+        选举自己
+        """
+        self.node_cache[self.node.node_key] = 1
 
 class Leader(State):
     """
