@@ -13,9 +13,6 @@ class MessageChannel(Channel):
 
     def input(self, data, recv):
         if recv:
-            ###############################
-            # print '[MessageChannel] data:', data
-            ###############################
             message = Message.parse(data, self.client)
         else:
             message = data
@@ -28,8 +25,8 @@ class MessageChannel(Channel):
 
 
 class NodeHandler(Handler):
-    def __init__(self, node):
-        self.node = node
+    def __init__(self, _node):
+        self.node = _node
 
     def handle(self, server, client, request):
         return self.node.dispatch(server, client, request)
@@ -51,9 +48,6 @@ class Node(object):
         self.leader = None
 
     def dispatch(self, server, client, message):
-        ##############################################
-        # print '[dispatch] message:', message
-        ##############################################
         if isinstance(message, ClientMessage):
             if message.op == 'get' or isinstance(self.state, Leader):
                 return self.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
@@ -83,11 +77,11 @@ if __name__ == '__main__':
     neighbors = None
     try:
         host = sys.argv[1]
-    except:
+    except Exception, e:
         pass
     try:
         port = int(sys.argv[2])
-    except:
+    except Exception, e:
         pass
     try:
         nei = sys.argv[3:]

@@ -34,7 +34,7 @@ class Follower(State):
         self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
 
     def _election_timeout(self, excepted_time, real_time):
-        print '###################### election timeout ....'
+        # print '###################### election timeout ....'
         if self.node.leader:
             # 之前已经产生了leader，但是还超时了，说明leader挂了
             # 挂了的节点，需要摘除
@@ -45,7 +45,7 @@ class Follower(State):
             self.voted = False
 
         if not self.voted and not self.node.leader:
-            print '[%.3f]election timeout ... turn to Candidate!' % real_time
+            # print '[%.3f]election timeout ... turn to Candidate!' % real_time
             # 转变状态之前去掉选举超时
             # self.node.server.rm_timer(self._election_timeout)
             self.node.state = Candidate(self.node)
@@ -78,9 +78,6 @@ class Candidate(State):
         self.node.server.set_timer((0.01, 0.05), True, self._elect_other_node)
 
     def handle(self, message):
-        # #########################################
-        # print 'Candidate handle:', message
-        # #########################################
         assert isinstance(message, NodeMessage)
         if isinstance(message, ElectMessage):
             return '@%s:%d@elect 0' % self.node.node_key
@@ -128,10 +125,10 @@ class Candidate(State):
         else:
             # 单节点，直接选举自己
             self.node_cache[self.node.node_key] = 1
-        print '===============================\nElect result:'
-        for k, v in self.node_cache.items():
-            print '\t', k, '\t', v
-        print '==============================='
+        # print '===============================\nElect result:'
+        # for k, v in self.node_cache.items():
+        #     print '\t', k, '\t', v
+        # print '==============================='
         elect_complite = True
         for value in self.node_cache.values():
             if value == -1:
