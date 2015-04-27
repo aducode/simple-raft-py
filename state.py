@@ -160,6 +160,7 @@ class Candidate(State):
         """
         self.node_cache[self.node.node_key] = 1
 
+
 class Leader(State):
     """
     Leader State
@@ -170,6 +171,15 @@ class Leader(State):
         self.buffer = []
         self.alive = []
         self.node.server.set_timer(0.1, True, self._heartbeat)
+
+    def handle(self, message):
+        """
+        处理其他node的消息
+        """
+        if isinstance(message, ElectMessage):
+            # 说明新接入了其他节点
+            self.node.neighbors.append(message.candidate)
+            return '@%s:%d@elect 0' % self.node.node_key
 
     def _heartbeat(self, excepted_time, real_time):
         del self.alive[:]
