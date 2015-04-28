@@ -8,10 +8,26 @@ from config import Config
 
 
 class MessageChannel(Channel):
+    """
+    node消息Channel
+    """
     def __init__(self, server, client, next):
+        """
+        构造方法
+        :param server 服务端
+        :param client 客户端
+        :param next   channle链的下一个
+        :return
+        """
         super(MessageChannel, self).__init__(server, client, next)
 
     def input(self, data, recv):
+        """
+        数据流入MessageChannel
+        :param data 上个channel来的数据
+        :param  recv 为False时表明不是server接收的
+        :return
+        """
         if recv:
             message = Message.parse(data, self.client)
         else:
@@ -20,20 +36,46 @@ class MessageChannel(Channel):
             return self.next.input(message, recv)
 
     def output(self):
+        """
+        流出数据到下一个channel
+        :return
+        """
         response, end = self.next.output()
         return '%s' % (response, ) if response else None, end
 
 
 class NodeHandler(Handler):
+    """
+    节点使用的网络事件处理类
+    """
     def __init__(self, _node):
+        """
+        构造方法
+        :param _node
+        :return
+        """
         self.node = _node
 
     def handle(self, server, client, request):
+        """
+        事件处理方法
+        :param server
+        :param client
+        :param request
+        :return
+        """
         return self.node.dispatch(server, client, request)
 
 
 class Node(object):
+    """
+    节点
+    """
     def __init__(self, _config):
+        """
+        构造方法
+        :param _config 配置
+        """
         self.config = _config
         """
         node中的neighbors是动态的
@@ -46,8 +88,25 @@ class Node(object):
         self.server.register_handler(NodeHandler(self))
         self.state = Follower(self)
         self.leader = None
+        self.server.set_timer(3, True, self._show_state)
+
+    def _show_state(self, excepted_time, real_time):
+        """
+        定时显示当前节点的状态
+        :param excepted_time:
+        :param real_time:
+        :return:
+        """
+        print '#', self.state
 
     def dispatch(self, server, client, message):
+        """
+        消息路由方法
+        :param server:
+        :param client:
+        :param message:
+        :return:
+        """
         if isinstance(message, ClientMessage):
             if message.op == 'get' or isinstance(self.state, Leader):
                 return self.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
@@ -61,6 +120,10 @@ class Node(object):
 
     @property
     def node_key(self):
+        """
+        node key属性
+        :return:
+        """
         # 这里不能用getsockname 会返回0.0.0.0
         # return self.server.accepter.getsockname()
         return self.config.host, self.config.port

@@ -16,7 +16,7 @@ class Message(object):
             if len(tokens) == 2:
                 return ClientMessage('get', tokens[1])
             else:
-                return InvalidMessage('Invalid GET operation format:%s'%data)
+                return InvalidMessage('Invalid GET operation format:%s' % data)
         elif data.startswith('del'):
             auto_commit = False
             if data.endswith(';commit'):
@@ -37,7 +37,7 @@ class Message(object):
             if len(tokens) == 3:
                 return ClientMessage('set', tokens[1], tokens[2], auto_comit)
             else:
-                return InvalidMessage('Invalid SET operation format:%s'% data)
+                return InvalidMessage('Invalid SET operation format:%s' % data)
         elif data == 'commit':
             # 客户端发来的提交
             return ClientMessage('commit')
@@ -64,23 +64,27 @@ class Message(object):
                 return InvalidMessage('IP %s in message source not eq IP  %s in socket' % (ip, client.getpeername()[0]))
             try:
                 port = int(ip_port[1])
-            except:
-                return InvalidMessage('Invalid port:%s' % ip_port[1])
+            except ValueError, e:
+                return InvalidMessage('Invalid port:%s , error: %s' % (ip_port[1], e))
             node_key = (ip, port)
             data = token[1].strip()
             if data == 'elect':
                 return ElectMessage(node_key)
             elif data.startswith('heartbeat'):
-                return HeartbeatMessage(node_key)
+                heartbeat_extra_msg_body = ' '.join(data.split()[1:])
+                extra_msg = Message.parse(heartbeat_extra_msg_body, client)
+                if not isinstance(extra_msg, ClientMessage):
+                    extra_msg = None
+                return HeartbeatMessage(node_key, extra_msg)
             else:
-                return InvalidMessage('Invalid Node Request Message:%s'% data)
+                return InvalidMessage('Invalid Node Request Message:%s' % data)
         elif data.startswith('@'):
             # 来自其他节点的应答消息
             # message format
-            #   @ip:port@msgbody value
+            # @ip:port@msgbody value
             data = data[1:].strip()
             token = data.split('@')
-            if not token or len(token)<2:
+            if not token or len(token) < 2:
                 return InvalidMessage('Invalid Node Response Message Format')
             source = token[0]
             ip_port = source.split(':')
@@ -89,17 +93,27 @@ class Message(object):
             ip = ip_port[0]
             try:
                 port = int(ip_port[1])
-            except:
-                return InvalidMessage('Invalid port:%s' % ip_port[1])
-            node_key=(ip, port)
+            except ValueError, e:
+                return InvalidMessage('Invalid port:%s , error: %s' % (ip_port[1], e))
+            node_key = (ip, port)
             data = token[1].strip()
             if data.startswith('elect'):
                 token = data.split()
-                if not token or len(token)!=2:
-                    return InvalidMessage('Invalid Node Elect Response Message:%s'% data)
+                if not token or len(token) != 2:
+                    return InvalidMessage('Invalid Node Elect Response Message:%s' % data)
                 try:
                     value = int(token[1])
                     return ElectResponseMessage(node_key, value)
+                except ValueError, e:
+                    return InvalidMessage(e)
+            elif data.startswith('heartbeat'):
+                # 心跳响应
+                token = data.split()
+                if not token or len(token) != 2:
+                    return InvalidMessage('Invalid Node Heartbeat Response Message:%s' % data)
+                try:
+                    value = int(token[1])
+                    return HeartbeatResponseMessage(node_key, value)
                 except ValueError, e:
                     return InvalidMessage(e)
             else:
@@ -125,27 +139,79 @@ class ClientMessage(Message):
 
 
 class NodeMessage(Message):
+    """
+    cluster中其他node发来的消息
+    """
     pass
 
 
 class ElectMessage(NodeMessage):
+    """
+    发起选举请求的消息
+    """
+
     def __init__(self, candidate):
+        """
+        :param candidate 选举发起节点node key
+        """
         self.candidate = candidate
 
 
 class ElectResponseMessage(NodeMessage):
-    def __init__(self, node_key, value):
-        self.node_key = node_key
+    """
+    响应选取结果的消息
+    """
+
+    def __init__(self, follower, value):
+        """
+        :param follower 参与选举的follower的node key
+        :param value    选举结果0已经选举其他node 1选取
+        """
+        self.follower = follower
         self.value = value
 
 
 class HeartbeatMessage(NodeMessage):
-    def __init__(self, leader):
+    """
+    leader发起的心跳
+    """
+
+    def __init__(self, leader, message=None):
+        """
+        构造方法
+        :param leader:  发出心跳的leader的node_key
+        :param message: 用于leader与follower同步数据，client message类型
+        :return:
+        """
         self.leader = leader
+        self.message = message
+
+
+class HeartbeatResponseMessage(NodeMessage):
+    """
+    Follower响应leader心跳请求
+    """
+    def __init__(self, follower, value):
+        """
+        构造方法
+        :param follower:  follower节点node key
+        :param value:     响应的结果
+        :return:
+        """
+        self.follower = follower
+        self.value = value
 
 
 class InvalidMessage(Message):
+    """
+    非法格式消息
+    """
     def __init__(self, msg='invalid message'):
+        """
+        构造方法
+        :param msg:
+        :return:
+        """
         self.message = msg
 
     def __str__(self):
