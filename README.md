@@ -7,3 +7,5 @@ http://thesecretlivesofdata.com/raft/
 * 完成基本的网络通讯框架，使用python select做多路IO复用
 * 可以处理定时器事件
 * 单节点可以进行一些基本的操作(get  set  del  commit)
+* cluster内节点选举
+* Leader挂掉，其余节点从新选举出leader
