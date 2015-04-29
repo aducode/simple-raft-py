@@ -90,7 +90,7 @@ class Node(object):
         self.leader = None
         if self.config.debug:
             # 每3秒显示下当前节点状态
-            self.server.set_timer(self.config.show_state_timeout, True, self._show_state)
+            self.server.set_timer(self.config.show_state_rate, True, self._show_state)
 
     def _show_state(self, excepted_time, real_time):
         """

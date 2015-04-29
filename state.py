@@ -221,9 +221,9 @@ class Leader(State):
     def __init__(self, node):
         super(Leader, self).__init__(node)
         # TODO 改成从配置文件获取这些参数的值
-        self.heartbeat_timeout = self.node.config.heartbeat_response_timeout  # 心跳超时2秒
+        self.heartbeat_timeout = self.node.config.heartbeat_timeout  # 心跳超时2秒
         self.heartbeat_request_time = {}  # 由于发出心跳请求与接收心跳响应是异步的，需要一个dict记录请求与响应之间是否超时
-        self.node.server.set_timer(self.node.config.heartbeat_timeout, True, self._heartbeat)
+        self.node.server.set_timer(self.node.config.heartbeat_rate, True, self._heartbeat)
 
     def on_elect_request(self, message):
         """
