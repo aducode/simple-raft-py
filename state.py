@@ -1,8 +1,7 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from protocol.message import NodeMessage, ElectMessage, HeartbeatMessage, ElectResponseMessage, HeartbeatResponseMessage
+from protocol.message import NodeMessage, ElectRequestMessage, HeartbeatRequestMessage, ElectResponseMessage, HeartbeatResponseMessage
 import time
-
 
 class State(object):
     """
@@ -18,14 +17,9 @@ class State(object):
         处理其他node的消息
         """
         pass
-        # assert isinstance(message, NodeMessage)
-        # if isinstance(message, ElectMessage) and not self.voted:
-        # self.voted = True
-        # return '@elect 1\n'
-        # elif isinstance(message, HeartbeatMessage):
-        # self.node.leader = HeartbeatMessage.leader
-        # return '@elect 1\n'
-        # return '@elect 0\n'
+
+    def __str__(self):
+        return self.__class__.__name__.strip().upper()
 
 
 class Follower(State):
@@ -36,7 +30,7 @@ class Follower(State):
     def __init__(self, node):
         super(Follower, self).__init__(node)
         self.voted = False
-        self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
+        self.node.server.set_timer(self.node.config.elect_timeout, False, self._election_timeout)
 
     def _election_timeout(self, excepted_time, real_time):
         """
@@ -66,7 +60,7 @@ class Follower(State):
             2.Candidate的Elect
         """
         assert isinstance(message, NodeMessage)
-        if isinstance(message, ElectMessage):
+        if isinstance(message, ElectRequestMessage):
             if not self.voted:
                 self.voted = True
                 return '@%s:%d@elect 1' % self.node.node_key
@@ -74,15 +68,16 @@ class Follower(State):
                 if message.candidate not in self.node.neighbors:
                     self.node.neighbors.append(message.candidate)
                 return '@%s:%d@elect 0' % self.node.node_key
-        elif isinstance(message, HeartbeatMessage):
+        elif isinstance(message, HeartbeatRequestMessage):
             self.node.leader = message.leader
             self.node.server.rm_timer(self._election_timeout)
+            self.node.neighbors = message.alives
             # 处理heartbeat带过来的extra msg
             extra_msg = message.message
             if extra_msg is not None:
                 print extra_msg
             # print 'Now do not reset the timeout handler'
-            self.node.server.set_timer((0.15, 0.3), False, self._election_timeout)
+            self.node.server.set_timer(self.node.config.elect_timeout, False, self._election_timeout)
             # 响应
             return '@%s:%s@heartbeat 1' % self.node.node_key
 
@@ -97,7 +92,7 @@ class Candidate(State):
         self.node_count = (len(self.node.neighbors) if self.node.neighbors else 0) + 1
         self.elect_count = 1
         self.node_cache = {}
-        self.node.server.set_timer((0.01, 0.05), True, self._elect_other_node)
+        self.node.server.set_timer(self.node.config.start_elect_timeout, True, self._elect_other_node)
 
     def handle(self, message):
         """
@@ -108,11 +103,12 @@ class Candidate(State):
             3.其他Follower的Elect，返回value: 0
         """
         assert isinstance(message, NodeMessage)
-        if isinstance(message, ElectMessage):
+        if isinstance(message, ElectRequestMessage):
             return '@%s:%d@elect 0' % self.node.node_key
-        elif isinstance(message, HeartbeatMessage):
+        elif isinstance(message, HeartbeatRequestMessage):
             self.node.leader = message.leader
             print 'FIND leader:%s' % (self.node.leader, )
+            self.node.neighbors = message.alives
             self.node.server.rm_timer(self._elect_other_node)
             self.node.state = Follower(self.node)
         elif isinstance(message, ElectResponseMessage):
@@ -151,7 +147,7 @@ class Candidate(State):
             self.node_cache[self.node.node_key] = 1
         # print '===============================\nElect result:'
         # for k, v in self.node_cache.items():
-        # print '\t', k, '\t', v
+        #     print '\t', k, '\t', v
         # print '==============================='
         elect_complite = True
         for value in self.node_cache.values():
@@ -183,9 +179,9 @@ class Leader(State):
     def __init__(self, node):
         super(Leader, self).__init__(node)
         # TODO 改成从配置文件获取这些参数的值
-        self.heartbeat_timeout = 2  #心跳超时2秒
+        self.heartbeat_timeout = self.node.config.heartbeat_response_timeout  # 心跳超时2秒
         self.heartbeat_request_time = {}  # 由于发出心跳请求与接收心跳响应是异步的，需要一个dict记录请求与响应之间是否超时
-        self.node.server.set_timer(0.1, True, self._heartbeat)
+        self.node.server.set_timer(self.node.config.heartbeat_timeout, True, self._heartbeat)
 
     def handle(self, message):
         """
@@ -194,7 +190,7 @@ class Leader(State):
             1.ElectMessage，说明是新接入的节点，加入neighbors列表
             2.HeartbeatResponse， 心跳响应，根据响应的值做相应处理
         """
-        if isinstance(message, ElectMessage):
+        if isinstance(message, ElectRequestMessage):
             # 说明新接入了其他节点
             self.node.neighbors.append(message.candidate)
             return '@%s:%d@elect 0' % self.node.node_key
@@ -212,14 +208,15 @@ class Leader(State):
             for follower_addr in self.node.neighbors:
                 # 判断上次heartbeat之后是否收到请求
                 if follower_addr in self.heartbeat_request_time and (
-                    self.heartbeat_request_time[follower_addr] - real_time) >= self.heartbeat_timeout:
+                            real_time - self.heartbeat_request_time[follower_addr]) >= self.heartbeat_timeout:
                     # 已经超时了，不再发心跳，并且从neighbors中移除
                     self.node.neighbors.remove(follower_addr)
+                    del self.heartbeat_request_time[follower_addr]
                     print 'node:', follower_addr, ' heartbeat timeout ...'
                     continue
                 try:
                     sock, follower = self.node.server.connect(follower_addr)
-                    follower.input('#%s:%d#heartbeat\n' % self.node.node_key, False)
+                    follower.input('#%s:%d#heartbeat %s\n' % (self.node.node_key[0], self.node.node_key[1], self._get_alives_info(follower_addr), ), False)
                     # 记录心跳发请求发出的时间
                     self.heartbeat_request_time[follower_addr] = time.time()
                 except Exception, e:
@@ -227,3 +224,13 @@ class Leader(State):
         else:
             # 说明只有一个节点
             pass
+
+    def _get_alives_info(self, source):
+        ret = []
+        for host, port in self.node.neighbors:
+            if (host, port) != source:
+                ret.append(str(host))
+                ret.append(str(port))
+        ret.append(str(self.node.node_key[0]))
+        ret.append(str(self.node.node_key[1]))
+        return ','.join(ret)

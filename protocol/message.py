@@ -3,6 +3,10 @@
 
 
 class Message(object):
+    """
+    消息类
+    TODO 这里解析做的太乱了。。
+    """
     @staticmethod
     def parse(data, client):
         """
@@ -69,13 +73,20 @@ class Message(object):
             node_key = (ip, port)
             data = token[1].strip()
             if data == 'elect':
-                return ElectMessage(node_key)
+                return ElectRequestMessage(node_key)
             elif data.startswith('heartbeat'):
-                heartbeat_extra_msg_body = ' '.join(data.split()[1:])
+                heartbeat_msg_body = data.split()
+                alives_info = heartbeat_msg_body[1].split(',')
+                if not alives_info and len(alives_info) % 2 != 0:
+                    return InvalidMessage('Invalid alive nodes info')
+                alives = []
+                for i in xrange(0, len(alives_info), 2):
+                    alives.append((alives_info[i], int(alives_info[i+1]), ))
+                heartbeat_extra_msg_body = ' '.join(heartbeat_msg_body[2:])
                 extra_msg = Message.parse(heartbeat_extra_msg_body, client)
                 if not isinstance(extra_msg, ClientMessage):
                     extra_msg = None
-                return HeartbeatMessage(node_key, extra_msg)
+                return HeartbeatRequestMessage(node_key, alives, extra_msg)
             else:
                 return InvalidMessage('Invalid Node Request Message:%s' % data)
         elif data.startswith('@'):
@@ -145,9 +156,11 @@ class NodeMessage(Message):
     pass
 
 
-class ElectMessage(NodeMessage):
+class ElectRequestMessage(NodeMessage):
     """
     发起选举请求的消息
+    消息格式：
+        #candidate_host:candidate_port#elect
     """
 
     def __init__(self, candidate):
@@ -160,6 +173,8 @@ class ElectMessage(NodeMessage):
 class ElectResponseMessage(NodeMessage):
     """
     响应选取结果的消息
+    消息格式：
+        @follower_host:follower_port@elect 1/0
     """
 
     def __init__(self, follower, value):
@@ -171,25 +186,31 @@ class ElectResponseMessage(NodeMessage):
         self.value = value
 
 
-class HeartbeatMessage(NodeMessage):
+class HeartbeatRequestMessage(NodeMessage):
     """
     leader发起的心跳
+    消息格式：
+        #leader_host:leader_port#heartbeat alivenode1_host,alivenode1_port,alivenode2_host,alivenode2_port... extra_msg
     """
 
-    def __init__(self, leader, message=None):
+    def __init__(self, leader, alives, message=None):
         """
         构造方法
         :param leader:  发出心跳的leader的node_key
+        :param alives:  活跃节点列表，同步给其他follower
         :param message: 用于leader与follower同步数据，client message类型
         :return:
         """
         self.leader = leader
+        self.alives = alives
         self.message = message
 
 
 class HeartbeatResponseMessage(NodeMessage):
     """
     Follower响应leader心跳请求
+    消息格式:
+        @folloer_host:follower_port@heartbeat 1/0
     """
     def __init__(self, follower, value):
         """

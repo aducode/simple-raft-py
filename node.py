@@ -88,7 +88,9 @@ class Node(object):
         self.server.register_handler(NodeHandler(self))
         self.state = Follower(self)
         self.leader = None
-        self.server.set_timer(3, True, self._show_state)
+        if self.config.debug:
+            # 每3秒显示下当前节点状态
+            self.server.set_timer(self.config.show_state_timeout, True, self._show_state)
 
     def _show_state(self, excepted_time, real_time):
         """
@@ -97,7 +99,11 @@ class Node(object):
         :param real_time:
         :return:
         """
-        print '#', self.state
+        print '> current node:\t', self.node_key
+        print '> current state:\t', self.state
+        print '> leader is:\t', self.leader
+        print '> neighbors are:\t', self.neighbors
+        print '>>'
 
     def dispatch(self, server, client, message):
         """
@@ -154,5 +160,6 @@ if __name__ == '__main__':
                 neighbors.append((nei[i], int(nei[i+1])))
     except:
         sys.exit(1)
-    node = Node(Config(host, port, neighbors=neighbors))
+    # node = Node(Config(host, port, neighbors=neighbors, debug=True, heartbeat_timeout=1, heartbeat_response_timeout=10, elect_timeout=(1.5, 3), start_elect_timeout=(0.1, 0.5)))
+    node = Node(Config(host, port, neighbors=neighbors, debug=True))
     node.start()
