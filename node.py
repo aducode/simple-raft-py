@@ -2,8 +2,8 @@
 # -*- coding:utf-8 -*-
 from server import Server, Handler
 from server import Channel, LineChannel
-from state import Follower, Leader
-from protocol.message import Message, ClientMessage, NodeMessage
+from state import Follower
+from protocol.message import Message
 
 
 class MessageChannel(Channel):
@@ -103,6 +103,8 @@ class Node(object):
         print '> leader is:\t', self.leader
         print '> neighbors are:\t', self.neighbors
         print '>>'
+        print '> db sessions:\t', self.config.db.session
+        print '>>'
 
     def dispatch(self, server, client, message):
         """
@@ -112,14 +114,8 @@ class Node(object):
         :param message:
         :return:
         """
-        if isinstance(message, ClientMessage):
-            if message.op == 'get' or isinstance(self.state, Leader):
-                return self.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
-            else:
-                #set del commit 操作需要重定位到leader操作
-                return '@%s:%d@redirect' % self.leader if self.leader else 'No Leader Elected, please wait until we have a leader...'
-        elif isinstance(message, NodeMessage):
-            return self.state.handle(message)
+        if isinstance(message, Message):
+            return self.state.handle(client, message)
         else:
             return message
 

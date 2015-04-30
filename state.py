@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from protocol.message import NodeMessage, ElectRequestMessage, HeartbeatRequestMessage, ElectResponseMessage, HeartbeatResponseMessage
+from protocol.message import Message, ClientMessage, ElectRequestMessage, HeartbeatRequestMessage, ElectResponseMessage, HeartbeatResponseMessage
 import time
 
 
@@ -13,41 +13,58 @@ class State(object):
     def __init__(self, node):
         self.node = node
 
-    def handle(self, message):
+    def handle(self, client, message):
         """
         处理其他node的消息
         """
-        assert isinstance(message, NodeMessage)
-        if isinstance(message, HeartbeatRequestMessage):
-            return self.on_heartbeat_request(message)
+        assert isinstance(message, Message)
+        if isinstance(message, ClientMessage):
+            if message.op == 'get':
+                return self.on_get(client, message)
+            else:
+                return self.on_update(client, message)
+        elif isinstance(message, HeartbeatRequestMessage):
+            return self.on_heartbeat_request(client, message)
         elif isinstance(message, HeartbeatResponseMessage):
-            return self.on_heartbeat_response(message)
+            return self.on_heartbeat_response(client, message)
         elif isinstance(message, ElectRequestMessage):
-            return self.on_elect_request(message)
+            return self.on_elect_request(client, message)
         elif isinstance(message, ElectResponseMessage):
-            return self.on_elect_response(message)
+            return self.on_elect_response(client, message)
         else:
             pass
 
-    def on_heartbeat_request(self, message):
+    def on_get(self, client, message):
+        """
+        处理客户端get请求
+        """
+        return self.node.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
+
+    def on_update(self, client, message):
+        """
+        处理客户端除了get外的请求
+        """
+        return '@%s:%d@redirect' % self.node.leader if self.node.leader else 'No Leader Elected, please wait until we have a leader...'
+
+    def on_heartbeat_request(self, client, message):
         """
         接收到heartbeat请求的处理方法
         """
         pass
 
-    def on_heartbeat_response(self, message):
+    def on_heartbeat_response(self, client, message):
         """
         接收到heartbeata响应的处理方法
         """
         pass
 
-    def on_elect_request(self, message):
+    def on_elect_request(self, client, message):
         """
         接收到选举请求的处理方法
         """
         pass
 
-    def on_elect_response(self, message):
+    def on_elect_response(self, client, message):
         """
         接收到选举响应的处理方法
         """
@@ -67,7 +84,7 @@ class Follower(State):
         self.voted = False
         self.node.server.set_timer(self.node.config.elect_timeout, False, self._election_timeout)
 
-    def on_elect_request(self, message):
+    def on_elect_request(self, client, message):
         """
         Follower处理选举请求消息
         """
@@ -79,7 +96,7 @@ class Follower(State):
                 self.node.neighbors.append(message.candidate)
             return '@%s:%d@elect 0' % self.node.node_key
 
-    def on_heartbeat_request(self, message):
+    def on_heartbeat_request(self, client, message):
         """
         Follower处理心跳请求消息
         """
@@ -128,7 +145,7 @@ class Candidate(State):
         self.node_cache = {}
         self.node.server.set_timer(self.node.config.start_elect_timeout, True, self._elect_other_node)
 
-    def on_elect_request(self, message):
+    def on_elect_request(self, client, message):
         """
         其他Follower的Elect，返回value: 0
         :param message:
@@ -136,7 +153,7 @@ class Candidate(State):
         """
         return '@%s:%d@elect 0' % self.node.node_key
 
-    def on_heartbeat_request(self, message):
+    def on_heartbeat_request(self, client, message):
         """
         如果接收到其他node的heartbeat则放弃candidate， 转为follower状态
         :param message:
@@ -148,7 +165,7 @@ class Candidate(State):
         self.node.server.rm_timer(self._elect_other_node)
         self.node.state = Follower(self.node)
 
-    def on_elect_response(self, message):
+    def on_elect_response(self, client, message):
         """
         其他Follower的ElectResponse，如果value：1 ，则票数+1
         :param message:
@@ -225,7 +242,7 @@ class Leader(State):
         self.heartbeat_request_time = {}  # 由于发出心跳请求与接收心跳响应是异步的，需要一个dict记录请求与响应之间是否超时
         self.node.server.set_timer(self.node.config.heartbeat_rate, True, self._heartbeat)
 
-    def on_elect_request(self, message):
+    def on_elect_request(self, client, message):
         """
         ElectMessage，说明是新接入的节点，加入neighbors列表
         :param message:
@@ -235,7 +252,10 @@ class Leader(State):
         self.node.neighbors.append(message.candidate)
         return '@%s:%d@elect 0' % self.node.node_key
 
-    def on_heartbeat_response(self, message):
+    def on_update(self, client, message):
+        return self.node.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
+
+    def on_heartbeat_response(self, client, message):
         """
         HeartbeatResponse， 心跳响应，根据响应的值做相应处理
         :param message:
