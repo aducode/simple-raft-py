@@ -34,6 +34,16 @@ class SimpleDB(object):
             print e
             return 'fail'
 
+    def release(self, session_id):
+        """
+        释放session相关资源
+        :param session_id:
+        :return:
+        """
+        print 'release the session:', session_id
+        if session_id in self.session:
+            del self.session[session_id]
+
     def get(self, session_id, key, value=None, auto_commit=False):
         """
         get请求

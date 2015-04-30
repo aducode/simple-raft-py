@@ -7,6 +7,13 @@ class Handler(object):
     def handle(self, server, client, request):
         pass
 
+    def close(self, server, client):
+        """
+        handler处理close
+        :return:
+        """
+        pass
+
 
 class DefaultHandler(Handler):
     def handle(self, server, client, request):

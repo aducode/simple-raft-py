@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from protocol.message import Message, ClientMessage, ElectRequestMessage, HeartbeatRequestMessage, ElectResponseMessage, HeartbeatResponseMessage
+from protocol.message import Message, ClientMessage, ClientCloseMessage, ElectRequestMessage, HeartbeatRequestMessage, ElectResponseMessage, HeartbeatResponseMessage
 import time
 
 
@@ -23,6 +23,8 @@ class State(object):
                 return self.on_get(client, message)
             else:
                 return self.on_update(client, message)
+        elif isinstance(message, ClientCloseMessage):
+            return self.on_client_close(client, message)
         elif isinstance(message, HeartbeatRequestMessage):
             return self.on_heartbeat_request(client, message)
         elif isinstance(message, HeartbeatResponseMessage):
@@ -45,6 +47,12 @@ class State(object):
         处理客户端除了get外的请求
         """
         return '@%s:%d@redirect' % self.node.leader if self.node.leader else 'No Leader Elected, please wait until we have a leader...'
+
+    def on_client_close(self, client, message):
+        """
+        处理客户端关闭
+        """
+        return self.node.config.db.release(message.client)
 
     def on_heartbeat_request(self, client, message):
         """

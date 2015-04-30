@@ -86,7 +86,6 @@ class IO2Channel(Channel):
         if (not response or end) and self.client in self.server.outputs:
             self.server.outputs.remove(self.client)
 
-
 class Channel2Handler(Channel):
     """
     与handler关联起来
@@ -101,16 +100,10 @@ class Channel2Handler(Channel):
         response = None
         self.recv = recv
         if recv:
-            ##################################
-            # print '[Channel2Handler]receiv:', data
-            ##################################
             if isinstance(self.next, Handler):
                 response = self.next.handle(self.server, self.client, data)
             elif isinstance(self.next, types.FunctionType):
                 response = self.next(self.server, self.client, data)
-            ##################################
-                # print '[Channel2Handler]after handle:', response
-            ##################################
         else:
             # 说明直接发出去
             response = data
@@ -128,6 +121,9 @@ class Channel2Handler(Channel):
             return self.queue.get_nowait(), self.queue.empty()# if self.recv else self.recv
         except Queue.Empty:
             return None, True
+
+    def close(self):
+        return self.next.close(self.server, self.client)
 
 
 class Server(object):
@@ -228,11 +224,7 @@ class Server(object):
             except KeyError:
                 print '[%s] removed.' % w
         for e in exceptional:
-            # print 'exception condition on ', e.getpeername()
-            self.inputs.remove(e)
-            if e in self.outputs:
-                self.outputs.remove(e)
-            e.close()
+            self.close(e)
             del self.context[e]
 
     def _get_timeout(self):
@@ -350,6 +342,7 @@ class Server(object):
         :param client:
         :return:
         """
+        self.context[client].close()
         addr = client.getpeername()
         if addr in self.connect_pool:
             del self.connect_pool[addr]

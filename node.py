@@ -3,7 +3,7 @@
 from server import Server, Handler
 from server import Channel, LineChannel
 from state import Follower
-from protocol.message import Message
+from protocol.message import Message, ClientCloseMessage
 
 
 class MessageChannel(Channel):
@@ -65,6 +65,12 @@ class NodeHandler(Handler):
         """
         return self.node.dispatch(server, client, request)
 
+    def close(self, server, client):
+        """
+        这里封装一个ClientCloseMessage，同样给handle方法处理
+        """
+        request = ClientCloseMessage(client)
+        self.handle(server, client, request)
 
 class Node(object):
     """
@@ -98,13 +104,14 @@ class Node(object):
         :param real_time:
         :return:
         """
+        import random
         print '> current node:\t', self.node_key
         print '> current state:\t', self.state
         print '> leader is:\t', self.leader
         print '> neighbors are:\t', self.neighbors
         print '>>'
         print '> db sessions:\t', self.config.db.session
-        print '>>'
+        print '>> ', random.randint(0, 100)
 
     def dispatch(self, server, client, message):
         """

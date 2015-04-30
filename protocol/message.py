@@ -134,6 +134,14 @@ class Message(object):
             return InvalidMessage('Invalild Message:%s' % data)
 
 
+class ClientCloseMessage(Message):
+    """
+    客户端关闭的消息
+    """
+    def __init__(self, client):
+        self.client = client
+
+
 class ClientMessage(Message):
     """
     客户端发来的消息

@@ -22,6 +22,12 @@ class Channel(object):
     def output(self):
         pass
 
+    def close(self):
+        """
+        说明socket被关闭，传递到handler
+        """
+        return self.next.close()
+
 
 class LineChannel(Channel):
     """
