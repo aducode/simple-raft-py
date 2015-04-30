@@ -9,3 +9,5 @@ http://thesecretlivesofdata.com/raft/
 * 单节点可以进行一些基本的操作(get  set  del  commit)
 * cluster内节点选举
 * Leader挂掉，其余节点从新选举出leader
+目标：
+* leader follower之间数据同步
