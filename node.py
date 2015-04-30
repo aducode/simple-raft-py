@@ -72,6 +72,7 @@ class NodeHandler(Handler):
         request = ClientCloseMessage(client)
         self.handle(server, client, request)
 
+
 class Node(object):
     """
     节点

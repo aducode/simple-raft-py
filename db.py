@@ -40,7 +40,6 @@ class SimpleDB(object):
         :param session_id:
         :return:
         """
-        print 'release the session:', session_id
         if session_id in self.session:
             del self.session[session_id]
 

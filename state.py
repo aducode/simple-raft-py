@@ -1,6 +1,9 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from protocol.message import Message, ClientMessage, ClientCloseMessage, ElectRequestMessage, HeartbeatRequestMessage, ElectResponseMessage, HeartbeatResponseMessage
+from protocol.message import \
+        Message, ClientMessage, ClientCloseMessage, \
+        ElectRequestMessage, HeartbeatRequestMessage, \
+        ElectResponseMessage, HeartbeatResponseMessage
 import time
 
 
@@ -249,6 +252,8 @@ class Leader(State):
         self.heartbeat_timeout = self.node.config.heartbeat_timeout  # 心跳超时2秒
         self.heartbeat_request_time = {}  # 由于发出心跳请求与接收心跳响应是异步的，需要一个dict记录请求与响应之间是否超时
         self.node.server.set_timer(self.node.config.heartbeat_rate, True, self._heartbeat)
+        # 记录连接的client
+        self.clients = {}
 
     def on_elect_request(self, client, message):
         """
@@ -261,6 +266,11 @@ class Leader(State):
         return '@%s:%d@elect 0' % self.node.node_key
 
     def on_update(self, client, message):
+        #TODO 更改应该随着heartbeat广播到follower上
+        # print 'recv client message:', client
+        # if client not in self.clients:
+        #     self.clients[client] = []
+        # self.clients[client].append(message)
         return self.node.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
 
     def on_heartbeat_response(self, client, message):

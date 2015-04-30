@@ -8,7 +8,7 @@ from node import Node
 def init_parser():
     usage = '''
     Usage:
-        python code.py host port [neighbor list] [-c config] [-v]
+        python code.py host port [neighbor list] [-c config] [-v] [-s]
     '''
     _parser = OptionParser(usage)
     _parser.add_option('-l', '--list',
@@ -20,6 +20,10 @@ def init_parser():
                        help='display more info',
                        action='store_true',
                        dest='verbose')
+    _parser.add_option('-s', '--single',
+                       help='start as sngle mode',
+                       action='store_true',
+                       dest='single')
     _parser.add_option('--db',
                        help='the db engine',
                        action='store',
@@ -59,19 +63,20 @@ def build_config(parser):
     port = int(args[1])
     # prepare for neighbors list
     neighbors = []
-    if options.list_file is not None:
-        with open(options.list_file) as list:
-            for line in list:
-                if not line.startswith('#'):
-                    host_port = line.split()
-                    if len(host_port) >= 2:
-                        neighbors.append((host_port[0], int(host_port[1]), ))
+    if not options.single:
+        if options.list_file is not None:
+            with open(options.list_file) as list:
+                for line in list:
+                    if not line.startswith('#'):
+                        host_port = line.split()
+                        if len(host_port) >= 2:
+                            neighbors.append((host_port[0], int(host_port[1]), ))
 
-    else:
-        neighbors_list = args[2:]
-        if neighbors_list and len(neighbors_list) % 2 == 0:
-            for i in xrange(0, len(neighbors_list), 2):
-                neighbors.append((neighbors_list[i], int(neighbors_list[i + 1])))
+        else:
+            neighbors_list = args[2:]
+            if neighbors_list and len(neighbors_list) % 2 == 0:
+                for i in xrange(0, len(neighbors_list), 2):
+                    neighbors.append((neighbors_list[i], int(neighbors_list[i + 1])))
     # prepare for elect_timeout
     elect_timeout = tuple([float(x) for x in options.elect_timeout.split(',')])
     #prepare for db
