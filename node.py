@@ -4,7 +4,6 @@ from server import Server, Handler
 from server import Channel, LineChannel
 from state import Follower, Leader
 from protocol.message import Message, ClientMessage, NodeMessage
-from config import Config
 
 
 class MessageChannel(Channel):
@@ -136,30 +135,3 @@ class Node(object):
 
     def start(self):
         self.server.server_forever()
-
-
-if __name__ == '__main__':
-    import sys
-    host = '127.0.0.1'
-    port = 2333
-    nei = None
-    neighbors = None
-    try:
-        host = sys.argv[1]
-    except Exception, e:
-        pass
-    try:
-        port = int(sys.argv[2])
-    except Exception, e:
-        pass
-    try:
-        nei = sys.argv[3:]
-        if nei and len(nei) % 2 == 0:
-            neighbors = []
-            for i in xrange(0, len(nei), 2):
-                neighbors.append((nei[i], int(nei[i+1])))
-    except:
-        sys.exit(1)
-    # node = Node(Config(host, port, neighbors=neighbors, debug=True, heartbeat_timeout=1, heartbeat_response_timeout=10, elect_timeout=(1.5, 3), start_elect_timeout=(0.1, 0.5)))
-    node = Node(Config(host, port, neighbors=neighbors, debug=True))
-    node.start()
