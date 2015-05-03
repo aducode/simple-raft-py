@@ -1,15 +1,18 @@
 #!/usr/bin/python
 # -*- coding:utf -*-
 __author__ = 'aducode@126.com'
+import sys
 from optparse import OptionParser
 from config import Config
 from node import Node
 
-def init_parser():
-    usage = '''
+usage = '''
     Usage:
         python code.py host port [neighbor list] [-c config] [-v] [-s]
     '''
+
+def init_parser():
+    global usage
     _parser = OptionParser(usage)
     _parser.add_option('-l', '--list',
                        help='the cluster node list, default node.list',
@@ -58,6 +61,9 @@ def init_parser():
 
 def build_config(parser):
     options, args = parser.parse_args()
+    if not args:
+	parser.parse_args('-h')
+	sys.exit(1)
     # prepare for host port
     host = args[0]
     port = int(args[1])
