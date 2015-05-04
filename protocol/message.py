@@ -19,6 +19,9 @@ class Message(object):
         """
         解析原始字符串信息
         """
+        if data is None:
+            return None
+        data = data.strip()
         vector = None
         if data.startswith('<') and '>' in data:
             try:
@@ -28,9 +31,7 @@ class Message(object):
                 data = '>'.join(tmp[1:])
             except Exception, e:
                 pass
-        if data is None:
-            return None
-        elif data.startswith('get') and ';' not in data:
+        if data.startswith('get') and ';' not in data:
             # 客户端发来的get操作
             tokens = data.split()
             if len(tokens) == 2:
@@ -99,10 +100,17 @@ class Message(object):
                 for i in xrange(0, len(alives_info), 2):
                     alives.append((alives_info[i], int(alives_info[i+1]), ))
                 heartbeat_extra_msg_body = ' '.join(heartbeat_msg_body[2:])
-                extra_msg = Message.parse(heartbeat_extra_msg_body, client)
-                if not isinstance(extra_msg, ClientMessage):
-                    extra_msg = None
-                return HeartbeatRequestMessage(node_key, alives, extra_msg, vector)
+                extra_msgs = []
+                if heartbeat_extra_msg_body:
+                    for heartbeat_extra_msg in heartbeat_extra_msg_body.split('|'):
+                        extra_msg = Message.parse(heartbeat_extra_msg, client)
+                        if not isinstance(extra_msg, ClientMessage):
+                            del extra_msgs[:]
+                            break
+                        extra_msgs.append(extra_msg)
+                if len(extra_msgs) == 0:
+                    extra_msgs = None
+                return HeartbeatRequestMessage(node_key, alives, extra_msgs, vector)
             else:
                 return InvalidMessage('Invalid Node Request Message:%s' % data)
         elif data.startswith('@'):
@@ -168,6 +176,18 @@ class ClientMessage(Message):
         self.key = key
         self.value = value
         self.auto_commit = auto_commit
+
+    def serialize(self, eol=False):
+        ret = []
+        ret.append(self.op)
+        if self.key is not None:
+            ret.append(self.key)
+        if self.value is not None:
+            ret.append(self.value)
+        if self.auto_commit:
+            ret.append(';')
+            ret.append('commit')
+        return ' '.join(ret)
 
     def __str__(self):
         return '[%s]%s:%s' % (self.op, self.key, self.value)
@@ -253,9 +273,10 @@ class HeartbeatRequestMessage(NodeMessage):
             alives_info.append(str(port))
         alives_info.append(str(self.leader[0]))
         alives_info.append(str(self.leader[1]))
-        return '<%d>#%s:%d#heartbeat %s' % (self.vector, self.leader[0], self.leader[1], ','.join(alives_info), ) + (
-            '\n' if eol else '')
-
+        return '<%d>#%s:%d#heartbeat %s %s' % (self.vector, self.leader[0], self.leader[1], ','.join(alives_info),
+                                               '|'.join([message.serialize() for message in
+                                                         self.message]) if self.message is not None else '') + (
+               '\n' if eol else '')
 
 class HeartbeatResponseMessage(NodeMessage):
     """

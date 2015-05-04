@@ -171,6 +171,7 @@ class Candidate(State):
         :param message:
         :return:
         """
+        print 'on heartbeat request.......'
         self.node.leader = message.leader
         print 'FIND leader:%s' % (self.node.leader, )
         self.node.neighbors = message.alives
@@ -232,6 +233,10 @@ class Candidate(State):
                 self.node.leader = self.node.node_key
                 self.node.state = Leader(self.node)
             else:
+                # print '================================\nElect result:'
+                # for k, v in self.node_cache.items():
+                #     print '\t', k, '\t', v
+                # print '================================'
                 print 'Elect fail ,turn to follower'
                 self.node.state = Follower(self.node)
 
@@ -264,7 +269,8 @@ class Leader(State):
         :return:
         """
         # 说明新接入了其他节点
-        self.node.neighbors.append(message.candidate)
+        if message.candidate not in self.node.neighbors:
+            self.node.neighbors.append(message.candidate)
         return ElectResponseMessage(self.node.node_key, 0).serialize()
 
     def on_update(self, client, message):
