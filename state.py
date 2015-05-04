@@ -320,18 +320,3 @@ class Leader(State):
         else:
             # 说明只有一个节点
             pass
-
-    def _get_alives_info(self, source):
-        """
-        获取活动节点信息
-        :param source: 请求来源
-        :return:
-        """
-        ret = []
-        for host, port in self.node.neighbors:
-            if (host, port) != source:
-                ret.append(str(host))
-                ret.append(str(port))
-        ret.append(str(self.node.node_key[0]))
-        ret.append(str(self.node.node_key[1]))
-        return ','.join(ret)
