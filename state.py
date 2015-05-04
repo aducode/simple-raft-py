@@ -5,6 +5,7 @@ from protocol.message import \
         ElectRequestMessage, HeartbeatRequestMessage, \
         ElectResponseMessage, HeartbeatResponseMessage
 import time
+import sys
 
 
 class State(object):
@@ -121,7 +122,7 @@ class Follower(State):
         # print 'Now do not reset the timeout handler'
         self.node.server.set_timer(self.node.config.elect_timeout, False, self._election_timeout)
         # 响应
-        return '@%s:%s@heartbeat 1' % self.node.node_key
+        return '<%d>@%s:%s@heartbeat 1' % (message.vector, self.node.node_key[0], self.node.node_key[1], )
 
     def _election_timeout(self, excepted_time, real_time):
         """
@@ -249,6 +250,8 @@ class Leader(State):
     def __init__(self, node):
         super(Leader, self).__init__(node)
         # TODO 改成从配置文件获取这些参数的值
+        # 时间向量
+        self.current_vector = 0
         self.heartbeat_timeout = self.node.config.heartbeat_timeout  # 心跳超时2秒
         self.heartbeat_request_time = {}  # 由于发出心跳请求与接收心跳响应是异步的，需要一个dict记录请求与响应之间是否超时
         self.node.server.set_timer(self.node.config.heartbeat_rate, True, self._heartbeat)
@@ -268,10 +271,15 @@ class Leader(State):
     def on_update(self, client, message):
         #TODO 更改应该随着heartbeat广播到follower上
         # print 'recv client message:', client
-        # if client not in self.clients:
-        #     self.clients[client] = []
-        # self.clients[client].append(message)
-        return self.node.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
+        if not self.node.neighbors:
+            # 单个节点
+            return self.node.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
+        else:
+            # 集群模式
+            if client not in self.clients:
+                self.clients[client] = []
+            self.clients[client].append(message)
+        # return self.node.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
 
     def on_heartbeat_response(self, client, message):
         """
@@ -279,7 +287,8 @@ class Leader(State):
         :param message:
         :return:
         """
-        pass
+        for client in self.clients:
+            self.node.server.get_channel(client).input('hello world\n', False)
 
     def _heartbeat(self, excepted_time, real_time):
         """
@@ -300,11 +309,15 @@ class Leader(State):
                     continue
                 try:
                     sock, follower = self.node.server.connect(follower_addr)
-                    follower.input('#%s:%d#heartbeat %s\n' % (self.node.node_key[0], self.node.node_key[1], self._get_alives_info(follower_addr), ), False)
+                    follower.input('<%d>#%s:%d#heartbeat %s\n' % (self.current_vector, self.node.node_key[0], self.node.node_key[1], self._get_alives_info(follower_addr), ), False)
                     # 记录心跳发请求发出的时间
                     self.heartbeat_request_time[follower_addr] = time.time()
                 except Exception, e:
                     pass
+            #vector自增
+            self.current_vector += 1
+            if self.current_vector == sys.maxint:
+                self.current_vector = 0
         else:
             # 说明只有一个节点
             pass

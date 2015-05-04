@@ -11,6 +11,7 @@ usage = '''
         python code.py host port [neighbor list] [-c config] [-v] [-s]
     '''
 
+
 def init_parser():
     global usage
     _parser = OptionParser(usage)

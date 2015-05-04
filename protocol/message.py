@@ -12,6 +12,15 @@ class Message(object):
         """
         解析原始字符串信息
         """
+        vector = None
+        if data.startswith('<') and '>' in data:
+            try:
+                # 带有时间向量的消息 <vector>data
+                tmp = data[1:].split('>')
+                vector = int(tmp[0])
+                data = '>'.join(tmp[1:])
+            except Exception, e:
+                pass
         if data is None:
             return None
         elif data.startswith('get') and ';' not in data:
@@ -86,7 +95,7 @@ class Message(object):
                 extra_msg = Message.parse(heartbeat_extra_msg_body, client)
                 if not isinstance(extra_msg, ClientMessage):
                     extra_msg = None
-                return HeartbeatRequestMessage(node_key, alives, extra_msg)
+                return HeartbeatRequestMessage(node_key, alives, extra_msg, vector)
             else:
                 return InvalidMessage('Invalid Node Request Message:%s' % data)
         elif data.startswith('@'):
@@ -124,7 +133,7 @@ class Message(object):
                     return InvalidMessage('Invalid Node Heartbeat Response Message:%s' % data)
                 try:
                     value = int(token[1])
-                    return HeartbeatResponseMessage(node_key, value)
+                    return HeartbeatResponseMessage(node_key, value, vector)
                 except ValueError, e:
                     return InvalidMessage(e)
             else:
@@ -201,17 +210,19 @@ class HeartbeatRequestMessage(NodeMessage):
         #leader_host:leader_port#heartbeat alivenode1_host,alivenode1_port,alivenode2_host,alivenode2_port... extra_msg
     """
 
-    def __init__(self, leader, alives, message=None):
+    def __init__(self, leader, alives, message=None, vector=None):
         """
         构造方法
         :param leader:  发出心跳的leader的node_key
         :param alives:  活跃节点列表，同步给其他follower
         :param message: 用于leader与follower同步数据，client message类型
+        :param vector:  时间向量
         :return:
         """
         self.leader = leader
         self.alives = alives
         self.message = message
+        self.vector = vector
 
 
 class HeartbeatResponseMessage(NodeMessage):
@@ -220,15 +231,17 @@ class HeartbeatResponseMessage(NodeMessage):
     消息格式:
         @folloer_host:follower_port@heartbeat 1/0
     """
-    def __init__(self, follower, value):
+    def __init__(self, follower, value, vector=None):
         """
         构造方法
         :param follower:  follower节点node key
         :param value:     响应的结果
+        :param vector:    时间向量
         :return:
         """
         self.follower = follower
         self.value = value
+        self.vector = vector
 
 
 class InvalidMessage(Message):

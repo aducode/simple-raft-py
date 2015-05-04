@@ -172,30 +172,34 @@ class Server(object):
 
     def handle_io_event(self):
         # print 'waiting for next event'
-        readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions, self._get_timeout())
-        for r in readable:
-            if r is self.accepter:
-                # A readable socket is ready to accept  a connection
-                connection, addr = r.accept()
-                # print 'connection from, ', addr
-                connection.setblocking(False)
-                self.inputs.append(connection)
-                # print 'accept %s' % connection
-                self.get_channel(connection)
-            else:
-                # readable from other system
+        try:
+            readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions,
+                                                            self._get_timeout())
+            for r in readable:
+                if r is self.accepter:
+                    # A readable socket is ready to accept  a connection
+                    connection, addr = r.accept()
+                    # print 'connection from, ', addr
+                    connection.setblocking(False)
+                    self.inputs.append(connection)
+                    # print 'accept %s' % connection
+                    self.get_channel(connection)
+                else:
+                    # readable from other system
+                    try:
+                        self.context[r].input()
+                    except KeyError:
+                        print '[%s] removed .' % r
+            for w in writable:
                 try:
-                    self.context[r].input()
+                    self.context[w].output()
                 except KeyError:
-                    print '[%s] removed .' % r
-        for w in writable:
-            try:
-                self.context[w].output()
-            except KeyError:
-                print '[%s] removed.' % w
-        for e in exceptional:
-            self.close(e)
-            del self.context[e]
+                    print '[%s] removed.' % w
+            for e in exceptional:
+                self.close(e)
+                del self.context[e]
+        except socket.error, e:
+            print e
 
     def _get_timeout(self):
         """
@@ -204,7 +208,7 @@ class Server(object):
         :return:
         """
         current = time.time()
-        ret = 1 #default timeout 1s
+        ret = 1  # default timeout 1s
         if not self.timers:
             # 如果没有超时事件，那么就不超时
             return ret
@@ -227,7 +231,7 @@ class Server(object):
                 for event in events:
                     if not event.rm:
                         event.invoke(t, current)
-                    if event.is_cron and not event.rm: #需要再次判断，因为可能在event.invoke的时候调用rm_timer
+                    if event.is_cron and not event.rm:  # 需要再次判断，因为可能在event.invoke的时候调用rm_timer
                         if isinstance(event.time, types.TupleType):
                             next_time = random.uniform(event.time[0], event.time[1]) + t
                         else:
@@ -244,9 +248,9 @@ class Server(object):
         self.timers.update(reset_timers)
         # 重新计算select的超时时间
         # for t in self.timers:
-        #     if not self.timeout or (t > current and t - current < self.timeout):
+        # if not self.timeout or (t > current and t - current < self.timeout):
         #         self.timeout = t - current
-                # print 'next timeout is ', self.timeout
+        # print 'next timeout is ', self.timeout
 
     def set_timer(self, target_time, is_cron, func, *args, **kwargs):
         """
@@ -303,7 +307,7 @@ class Server(object):
             client = self.connect_pool[addr]
         # self.outputs.append(client)
         # if client not in self.inputs:
-        #     self.inputs.append(client)
+        # self.inputs.append(client)
         return client, self.context.get(client, None)
 
     def close(self, client):
@@ -396,7 +400,7 @@ class Server(object):
         # self.timeout = None
         # current = time.time()
         # for t in self.timers:
-        #     timeout = t - current
+        # timeout = t - current
         #     if not self.timeout or (timeout > 0 and timeout < self.timeout):
         #         self.timeout = timeout
         # set state
