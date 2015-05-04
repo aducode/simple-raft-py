@@ -7,6 +7,13 @@ class Message(object):
     消息类
     TODO 这里解析做的太乱了。。
     """
+    def serialize(self, eol=False):
+        """
+        消息类序列化成文本消息
+        :param eol: 是否包含end of line 换行符
+        """
+        pass
+
     @staticmethod
     def parse(data, client):
         """
@@ -186,6 +193,12 @@ class ElectRequestMessage(NodeMessage):
         """
         self.candidate = candidate
 
+    def serialize(self, eol=False):
+        """
+        重载
+        """
+        return '#%s:%d#elect' % self.candidate + ('\n' if eol else '')
+
 
 class ElectResponseMessage(NodeMessage):
     """
@@ -201,6 +214,12 @@ class ElectResponseMessage(NodeMessage):
         """
         self.follower = follower
         self.value = value
+
+    def serialize(self, eol=False):
+        """
+        重载
+        """
+        return '@%s:%d@elect %s' % (self.follower[0], self.follower[1], self.value) + ('\n' if eol else '')
 
 
 class HeartbeatRequestMessage(NodeMessage):
@@ -224,6 +243,19 @@ class HeartbeatRequestMessage(NodeMessage):
         self.message = message
         self.vector = vector
 
+    def serialize(self, eol=False):
+        """
+        重载
+        """
+        alives_info = []
+        for host, port in self.alives:
+            alives_info.append(str(host))
+            alives_info.append(str(port))
+        alives_info.append(str(self.leader[0]))
+        alives_info.append(str(self.leader[1]))
+        return '<%d>#%s:%d#heartbeat %s' % (self.vector, self.leader[0], self.leader[1], ','.join(alives_info), ) + (
+            '\n' if eol else '')
+
 
 class HeartbeatResponseMessage(NodeMessage):
     """
@@ -242,6 +274,13 @@ class HeartbeatResponseMessage(NodeMessage):
         self.follower = follower
         self.value = value
         self.vector = vector
+
+    def serialize(self, eol=False):
+        """
+        重载
+        """
+        return '<%d>@%s:%d@heartbeat %s' % (self.vector, self.follower[0], self.follower[1], self.value) + (
+            '\n' if eol else '')
 
 
 class InvalidMessage(Message):

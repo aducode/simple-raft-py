@@ -102,11 +102,11 @@ class Follower(State):
         """
         if not self.voted:
             self.voted = True
-            return '@%s:%d@elect 1' % self.node.node_key
+            return ElectResponseMessage(self.node.node_key, 1).serialize()
         else:
             if message.candidate not in self.node.neighbors:
                 self.node.neighbors.append(message.candidate)
-            return '@%s:%d@elect 0' % self.node.node_key
+            return ElectResponseMessage(self.node.node_key, 0).serialize()
 
     def on_heartbeat_request(self, client, message):
         """
@@ -122,7 +122,7 @@ class Follower(State):
         # print 'Now do not reset the timeout handler'
         self.node.server.set_timer(self.node.config.elect_timeout, False, self._election_timeout)
         # 响应
-        return '<%d>@%s:%s@heartbeat 1' % (message.vector, self.node.node_key[0], self.node.node_key[1], )
+        return HeartbeatResponseMessage(self.node.node_key, 1, message.vector).serialize()
 
     def _election_timeout(self, excepted_time, real_time):
         """
@@ -163,7 +163,7 @@ class Candidate(State):
         :param message:
         :return:
         """
-        return '@%s:%d@elect 0' % self.node.node_key
+        return ElectResponseMessage(self.node.node_key, 0).serialize()
 
     def on_heartbeat_request(self, client, message):
         """
@@ -202,7 +202,7 @@ class Candidate(State):
                     # follower.send('#%s:%d#elect\n' % self.node.node_key)
                     # if sock in self.node.server.context:
                     if follower_addr not in self.node_cache:
-                        follower.input('#%s:%d#elect\n' % self.node.node_key, False)
+                        follower.input(ElectRequestMessage(self.node.node_key).serialize(True), False)
                         self.node_cache[follower_addr] = -1
                     elif self.node_cache[follower_addr] != -1:
                         self.node.server.close(sock)
@@ -249,7 +249,6 @@ class Leader(State):
 
     def __init__(self, node):
         super(Leader, self).__init__(node)
-        # TODO 改成从配置文件获取这些参数的值
         # 时间向量
         self.current_vector = 0
         self.heartbeat_timeout = self.node.config.heartbeat_timeout  # 心跳超时2秒
@@ -266,7 +265,7 @@ class Leader(State):
         """
         # 说明新接入了其他节点
         self.node.neighbors.append(message.candidate)
-        return '@%s:%d@elect 0' % self.node.node_key
+        return ElectResponseMessage(self.node.node_key, 0).serialize()
 
     def on_update(self, client, message):
         #TODO 更改应该随着heartbeat广播到follower上
@@ -309,7 +308,7 @@ class Leader(State):
                     continue
                 try:
                     sock, follower = self.node.server.connect(follower_addr)
-                    follower.input('<%d>#%s:%d#heartbeat %s\n' % (self.current_vector, self.node.node_key[0], self.node.node_key[1], self._get_alives_info(follower_addr), ), False)
+                    follower.input(HeartbeatRequestMessage(self.node.node_key, [n for n in self.node.neighbors if n != follower_addr], vector=self.current_vector).serialize(True), False)
                     # 记录心跳发请求发出的时间
                     self.heartbeat_request_time[follower_addr] = time.time()
                 except Exception, e:
