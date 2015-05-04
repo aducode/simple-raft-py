@@ -10,15 +10,15 @@ class MessageChannel(Channel):
     """
     node消息Channel
     """
-    def __init__(self, server, client, next):
+    def __init__(self, server, client, _next):
         """
         构造方法
         :param server 服务端
         :param client 客户端
-        :param next   channle链的下一个
+        :param _next   channle链的下一个
         :return
         """
-        super(MessageChannel, self).__init__(server, client, next)
+        super(MessageChannel, self).__init__(server, client, _next)
 
     def input(self, data, recv):
         """

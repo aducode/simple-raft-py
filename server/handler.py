@@ -18,5 +18,5 @@ class Handler(object):
 class DefaultHandler(Handler):
     def handle(self, server, client, request):
         if request == 'quit':
-            self.server.stop()
+            server.stop()
         return request.upper() + '\n' + hashlib.md5(request.encode('utf-8')).hexdigest()+'\n'

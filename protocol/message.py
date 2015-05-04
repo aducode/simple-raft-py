@@ -30,7 +30,8 @@ class Message(object):
                 vector = int(tmp[0])
                 data = '>'.join(tmp[1:])
             except Exception, e:
-                pass
+                # 集群内部的消息，一般不会出错
+                return InvalidMessage(str(e))
         if data.startswith('get') and ';' not in data:
             # 客户端发来的get操作
             tokens = data.split()
@@ -140,7 +141,7 @@ class Message(object):
                     value = int(token[1])
                     return ElectResponseMessage(node_key, value)
                 except ValueError, e:
-                    return InvalidMessage(e)
+                    return InvalidMessage(str(e))
             elif data.startswith('heartbeat'):
                 # 心跳响应
                 token = data.split()
@@ -150,7 +151,7 @@ class Message(object):
                     value = int(token[1])
                     return HeartbeatResponseMessage(node_key, value, vector)
                 except ValueError, e:
-                    return InvalidMessage(e)
+                    return InvalidMessage(str(e))
             else:
                 return InvalidMessage('Invalid Response Message:%s' % data)
         else:
@@ -178,7 +179,7 @@ class ClientMessage(Message):
         self.auto_commit = auto_commit
 
     def serialize(self, eol=False):
-        ret = []
+        ret = list()
         ret.append(self.op)
         if self.key is not None:
             ret.append(self.key)
@@ -277,6 +278,7 @@ class HeartbeatRequestMessage(NodeMessage):
                                                '|'.join([message.serialize() for message in
                                                          self.message]) if self.message is not None else '') + (
                '\n' if eol else '')
+
 
 class HeartbeatResponseMessage(NodeMessage):
     """

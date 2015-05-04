@@ -9,7 +9,7 @@ class Config(object):
     """
 
     def __init__(self, host, port,
-                 neighbors=[],
+                 neighbors=None,
                  db=None,
                  heartbeat_rate=0.1,
                  heartbeat_timeout=2,
@@ -21,7 +21,7 @@ class Config(object):
         构造方法
         :param host;        主机名
         :param port;        端口号
-        :param neighobrs:   相邻节点
+        :param neighbors:   相邻节点
         :param db;          数据存储引擎
         :param heartbeat_rate; 心跳间隔
         :param heartbeat_timeout; 心跳响应超时时间
@@ -33,7 +33,7 @@ class Config(object):
         """
         self.host = host
         self.port = port
-        self.neighbors = neighbors
+        self.neighbors = neighbors if neighbors is not None else []
         self.db = db if db else SimpleDB()
         self.heartbeat_timeout = heartbeat_timeout
         self.heartbeat_rate = heartbeat_rate

@@ -1,15 +1,12 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-import types
-import Queue
-from handler import Handler
 
 
 class Channel(object):
-    def __init__(self, server, client, next):
+    def __init__(self, server, client, _next):
         self.server = server
         self.client = client
-        self.next = next
+        self.next = _next
 
     def input(self, data, recv):
         """
@@ -34,8 +31,8 @@ class LineChannel(Channel):
     保存客户端连接
     """
 
-    def __init__(self, server, client, next):
-        super(LineChannel, self).__init__(server, client, next)
+    def __init__(self, server, client, _next):
+        super(LineChannel, self).__init__(server, client, _next)
         self.input_buffer = ''
 
     def input(self, request, recv):

@@ -65,7 +65,7 @@ def build_config(parser):
     if not args:
         try:
             parser.parse_args('-h')
-        except Exception, e:
+        except TypeError:
             global usage
             print usage
         sys.exit(1)
@@ -76,8 +76,8 @@ def build_config(parser):
     neighbors = []
     if not options.single:
         if options.list_file is not None:
-            with open(options.list_file) as list:
-                for line in list:
+            with open(options.list_file) as _list:
+                for line in _list:
                     if not line.startswith('#'):
                         host_port = line.split()
                         if len(host_port) >= 2:
@@ -90,8 +90,7 @@ def build_config(parser):
                     neighbors.append((neighbors_list[i], int(neighbors_list[i + 1])))
     # prepare for elect_timeout
     elect_timeout = tuple([float(x) for x in options.elect_timeout.split(',')])
-    #prepare for db
-    #TODO currentlly just None
+    # prepare for db
     return Config(host, port,
                   neighbors=neighbors,
                   db=options.db,
@@ -104,5 +103,3 @@ def build_config(parser):
 
 if __name__ == '__main__':
     node = Node(build_config(init_parser())).start()
-
-

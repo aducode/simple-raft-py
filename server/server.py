@@ -29,8 +29,8 @@ class IO2Channel(Channel):
     直接与IO关联的Channel
     """
 
-    def __init__(self, server, client, next):
-        super(IO2Channel, self).__init__(server, client, next)
+    def __init__(self, server, client, _next):
+        super(IO2Channel, self).__init__(server, client, _next)
 
     def input(self, data=None, recv=True):
         client_close = False
@@ -54,7 +54,7 @@ class IO2Channel(Channel):
         if response:
             try:
                 self.client.send(response)
-            except (IOError, socket.error), e:
+            except (IOError, socket.error):
                 self.server.close(self.client)
         if (not response or end) and self.client in self.server.outputs:
             self.server.outputs.remove(self.client)
@@ -65,8 +65,8 @@ class Channel2Handler(Channel):
     与handler关联起来
     """
 
-    def __init__(self, server, client, next):
-        super(Channel2Handler, self).__init__(server, client, next)
+    def __init__(self, server, client, _next):
+        super(Channel2Handler, self).__init__(server, client, _next)
         self.queue = Queue.Queue()
 
     def input(self, data, recv):
@@ -425,5 +425,3 @@ class Server(object):
         # release the resources
         self.realease()
         print 'Server stopped!'
-
-
