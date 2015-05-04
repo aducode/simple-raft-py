@@ -134,7 +134,7 @@ class Server(object):
 
     def register_handler(self, handler):
         if handler and (
-                    self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)) or isinstance(
+                self._is_subclass_of(handler, Handler) or isinstance(handler, types.FunctionType)) or isinstance(
                 handler,
                 Handler):
             self.handler_class = handler
@@ -173,6 +173,9 @@ class Server(object):
     def handle_io_event(self):
         # print 'waiting for next event'
         try:
+            # print 'inputs:', self.inputs
+            # print 'outputs:', self.outputs
+            # print 'exceptins:', self.exceptions
             readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions,
                                                             self._get_timeout())
             for r in readable:
@@ -200,6 +203,7 @@ class Server(object):
                 del self.context[e]
         except socket.error, e:
             print e
+
 
     def _get_timeout(self):
         """

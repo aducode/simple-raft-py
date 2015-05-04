@@ -1,9 +1,9 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
 from protocol.message import \
-        Message, ClientMessage, ClientCloseMessage, \
-        ElectRequestMessage, HeartbeatRequestMessage, \
-        ElectResponseMessage, HeartbeatResponseMessage
+    Message, ClientMessage, ClientCloseMessage, \
+    ElectRequestMessage, HeartbeatRequestMessage, \
+    ElectResponseMessage, HeartbeatResponseMessage
 import time
 import sys
 
@@ -50,7 +50,8 @@ class State(object):
         """
         处理客户端除了get外的请求
         """
-        return '@%s:%d@redirect' % self.node.leader if self.node.leader else 'No Leader Elected, please wait until we have a leader...'
+        return '@%s:%d@redirect' % self.node.leader if self.node.leader \
+            else 'No Leader Elected, please wait until we have a leader...'
 
     def on_client_close(self, client, message):
         """
@@ -171,7 +172,6 @@ class Candidate(State):
         :param message:
         :return:
         """
-        print 'on heartbeat request.......'
         self.node.leader = message.leader
         print 'FIND leader:%s' % (self.node.leader, )
         self.node.neighbors = message.alives
@@ -221,22 +221,18 @@ class Candidate(State):
         # for k, v in self.node_cache.items():
         #     print '\t', k, '\t', v
         # print '==============================='
-        elect_complite = True
+        elect_complete = True
         for value in self.node_cache.values():
             if value == -1:
-                elect_complite = False
+                elect_complete = False
                 break
-        if len(self.node_cache) == self.node_count and elect_complite:
+        if len(self.node_cache) == self.node_count and elect_complete:
             self.node.server.rm_timer(self._elect_other_node)
             if self.elect_count > self.node_count / 2:
                 print 'I\'m the leader:%s' % (self.node.node_key,)
                 self.node.leader = self.node.node_key
                 self.node.state = Leader(self.node)
             else:
-                # print '================================\nElect result:'
-                # for k, v in self.node_cache.items():
-                #     print '\t', k, '\t', v
-                # print '================================'
                 print 'Elect fail ,turn to follower'
                 self.node.state = Follower(self.node)
 
@@ -274,7 +270,7 @@ class Leader(State):
         return ElectResponseMessage(self.node.node_key, 0).serialize()
 
     def on_update(self, client, message):
-        #TODO 更改应该随着heartbeat广播到follower上
+        # TODO 更改应该随着heartbeat广播到follower上
         # print 'recv client message:', client
         if not self.node.neighbors:
             # 单个节点
@@ -293,7 +289,9 @@ class Leader(State):
         :return:
         """
         for client in self.clients:
-            self.node.server.get_channel(client).input('hello world\n', False)
+            client_message = self.clients[client][-1]
+            self.node.server.get_channel(client).input(self.node.config.db.handle(client, client_message.op, client_message.key, client_message.value, client_message.auto_commit) + '\n', False)
+        self.clients = dict()
 
     def _heartbeat(self, excepted_time, real_time):
         """
@@ -306,20 +304,24 @@ class Leader(State):
             for follower_addr in self.node.neighbors:
                 # 判断上次heartbeat之后是否收到请求
                 if follower_addr in self.heartbeat_request_time and (
-                            real_time - self.heartbeat_request_time[follower_addr]) >= self.heartbeat_timeout:
+                        real_time - self.heartbeat_request_time[follower_addr]) >= self.heartbeat_timeout:
                     # 已经超时了，不再发心跳，并且从neighbors中移除
                     self.node.neighbors.remove(follower_addr)
                     del self.heartbeat_request_time[follower_addr]
                     print 'node:', follower_addr, ' heartbeat timeout ...'
                     continue
                 try:
+                    client_message = None
                     sock, follower = self.node.server.connect(follower_addr)
-                    follower.input(HeartbeatRequestMessage(self.node.node_key, [n for n in self.node.neighbors if n != follower_addr], vector=self.current_vector).serialize(True), False)
+                    follower.input(HeartbeatRequestMessage(self.node.node_key,
+                                                           [n for n in self.node.neighbors if n != follower_addr],
+                                                           message=client_message,
+                                                           vector=self.current_vector).serialize(True), False)
                     # 记录心跳发请求发出的时间
                     self.heartbeat_request_time[follower_addr] = time.time()
-                except Exception, e:
+                except Exception:
                     pass
-            #vector自增
+            # vector自增
             self.current_vector += 1
             if self.current_vector == sys.maxint:
                 self.current_vector = 0

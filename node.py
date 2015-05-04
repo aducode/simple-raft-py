@@ -3,7 +3,7 @@
 from server import Server, Handler
 from server import Channel, LineChannel
 from state import Follower
-from protocol.message import Message, ClientCloseMessage
+from protocol.message import Message, ClientCloseMessage, InvalidMessage
 
 
 class MessageChannel(Channel):
@@ -123,7 +123,10 @@ class Node(object):
         :return:
         """
         if isinstance(message, Message):
-            return self.state.handle(client, message)
+            if isinstance(message, InvalidMessage):
+                return message
+            else:
+                return self.state.handle(client, message)
         else:
             return message
 
@@ -133,8 +136,6 @@ class Node(object):
         node key属性
         :return:
         """
-        # 这里不能用getsockname 会返回0.0.0.0
-        # return self.server.accepter.getsockname()
         return self.config.host, self.config.port
 
     def start(self):
