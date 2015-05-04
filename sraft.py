@@ -62,8 +62,12 @@ def init_parser():
 def build_config(parser):
     options, args = parser.parse_args()
     if not args:
-	parser.parse_args('-h')
-	sys.exit(1)
+        try:
+            parser.parse_args('-h')
+        except Exception, e:
+            global usage
+            print usage
+        sys.exit(1)
     # prepare for host port
     host = args[0]
     port = int(args[1])
