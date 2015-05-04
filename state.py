@@ -118,12 +118,17 @@ class Follower(State):
         self.node.neighbors = message.alives
         # 处理heartbeat带过来的extra msg
         extra_msg = message.message
+        ret = 1
         if extra_msg is not None:
-            print extra_msg
+            for msg in extra_msg:
+                if isinstance(msg, ClientMessage):
+                    if 'fail' == self.node.config.db.handle(client, msg.op, msg.key, msg.value, msg.auto_commit):
+                        ret = 0
+                        break
         # print 'Now do not reset the timeout handler'
         self.node.server.set_timer(self.node.config.elect_timeout, False, self._election_timeout)
         # 响应
-        return HeartbeatResponseMessage(self.node.node_key, 1, message.vector).serialize()
+        return HeartbeatResponseMessage(self.node.node_key, ret, message.vector).serialize()
 
     def _election_timeout(self, excepted_time, real_time):
         """
@@ -311,11 +316,13 @@ class Leader(State):
                     print 'node:', follower_addr, ' heartbeat timeout ...'
                     continue
                 try:
-                    client_message = None
+                    client_messages = []
+                    for client in self.clients:
+                        client_messages.append(self.clients[client][-1])
                     sock, follower = self.node.server.connect(follower_addr)
                     follower.input(HeartbeatRequestMessage(self.node.node_key,
                                                            [n for n in self.node.neighbors if n != follower_addr],
-                                                           message=client_message,
+                                                           message=client_messages,
                                                            vector=self.current_vector).serialize(True), False)
                     # 记录心跳发请求发出的时间
                     self.heartbeat_request_time[follower_addr] = time.time()
