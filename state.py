@@ -259,6 +259,8 @@ class Leader(State):
         self.current_vector = 0
         self.heartbeat_timeout = self.node.config.heartbeat_timeout  # 心跳超时2秒
         self.heartbeat_request_time = {}  # 由于发出心跳请求与接收心跳响应是异步的，需要一个dict记录请求与响应之间是否超时
+        # 记录心跳响应结果
+        self.heartbeat_result = {}
         self.node.server.set_timer(self.node.config.heartbeat_rate, True, self._heartbeat)
         # 记录连接的client
         self.clients = {}
@@ -293,10 +295,25 @@ class Leader(State):
         :param message:
         :return:
         """
-        for client in self.clients:
-            client_message = self.clients[client][-1]
-            self.node.server.get_channel(client).input(self.node.config.db.handle(client, client_message.op, client_message.key, client_message.value, client_message.auto_commit) + '\n', False)
-        self.clients = dict()
+        if message.follower not in self.heartbeat_result:
+            self.heartbeat_result[message.follower] = message.value
+        succeed_response = 0
+        if len(self.node.neighbors) == len(self.heartbeat_result):
+            # 说明收到了全部的响应
+            for v in self.heartbeat_result.values():
+                if v == 1:
+                    succeed_response += 1
+            if succeed_response >= len(self.heartbeat_result)/2:
+                for client in self.clients:
+                    client_message = self.clients[client][-1]
+                    self.node.server.get_channel(client).input(self.node.config.db.handle(client, client_message.op, client_message.key, client_message.value, client_message.auto_commit) + '\n', False)
+                self.clients = dict()
+                self.heartbeat_result = dict()
+            else:
+                for client in self.clients:
+                    self.node.server.get_channel(client).input('operate fail in cluster\n', False)
+                self.clients = dict()
+                self.heartbeat_result = dict()
 
     def _heartbeat(self, excepted_time, real_time):
         """
