@@ -4,6 +4,7 @@
 http://thesecretlivesofdata.com/raft/
 
 目前进度：
+
 1. 完成基本的网络通讯框架，使用python select做多路IO复用
 2. 可以处理定时器事件
 3. 单节点可以进行一些基本的操作(get  set  del  commit)
