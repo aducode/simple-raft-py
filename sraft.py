@@ -30,6 +30,7 @@ def init_parser():
                        dest='single')
     _parser.add_option('--db',
                        help='the db engine',
+                       default='simple',
                        action='store',
                        type='string',
                        dest='db')

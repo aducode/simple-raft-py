@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- coding:utf-8 -*-
-from db import SimpleDB
+from db.simple import DB
+import types
 
 
 class Config(object):
@@ -22,7 +23,7 @@ class Config(object):
         :param host;        主机名
         :param port;        端口号
         :param neighbors:   相邻节点
-        :param db;          数据存储引擎
+        :param db;          数据存储引擎(名)
         :param heartbeat_rate; 心跳间隔
         :param heartbeat_timeout; 心跳响应超时时间
         :param elect_timeout; 选举超时时间
@@ -34,13 +35,17 @@ class Config(object):
         self.host = host
         self.port = port
         self.neighbors = neighbors if neighbors is not None else []
-        self.db = db if db else SimpleDB()
         self.heartbeat_timeout = heartbeat_timeout
         self.heartbeat_rate = heartbeat_rate
         self.elect_timeout = elect_timeout
         self.start_elect_timeout = start_elect_timeout
         self.debug = debug
         self.show_state_rate = show_state_rate
-
+        # for db
+        if db is None:
+            self.db = DB()
+        elif isinstance(db, types.StringTypes):
+            # db engine name
+            self.db = __import__('db').__dict__[db].__dict__['DB']()
         if (self.host, self.port) in self.neighbors:
             self.neighbors.remove((self.host, self.port, ))

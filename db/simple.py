@@ -1,8 +1,9 @@
-#!/usr/bin/python
+# !/usr/bin/python
 # -*- coding:utf-8 -*-
+__author__ = 'Administrator'
 
 
-class SimpleDB(object):
+class DB(object):
     """
     Simple Memeory DB
     """
