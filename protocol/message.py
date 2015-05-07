@@ -65,6 +65,10 @@ class Message(object):
             return ClientMessage('commit')
         elif data == 'rollback':
             return ClientMessage('rollback')
+        elif data == 'release':
+            # 特殊clientmessage
+            # leader 同步到 follower的message，表示client与leader断开
+            return ClientMessage('release')
         elif data.startswith('#'):
             # 来自其他节点的请求消息
             # node message格式
@@ -184,7 +188,7 @@ class ClientMessage(Message):
         if self.key is not None:
             ret.append(self.key)
         if self.value is not None:
-            ret.append(self.value)
+            ret.append(str(self.value))
         if self.auto_commit:
             ret.append(';')
             ret.append('commit')

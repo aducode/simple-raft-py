@@ -35,14 +35,16 @@ class DB(object):
             print e
             return 'fail'
 
-    def release(self, session_id):
+    def release(self, session_id, key=None, value=None, auto_commit=False):
         """
         释放session相关资源
         :param session_id:
-        :return:
+        :return Boolean:
         """
         if session_id in self.session:
             del self.session[session_id]
+            return True
+        return False
 
     def get(self, session_id, key, value=None, auto_commit=False):
         """

@@ -122,6 +122,9 @@ class Follower(State):
         if extra_msg is not None:
             for msg in extra_msg:
                 if isinstance(msg, ClientMessage):
+                    if msg.op == 'release' and True == self.node.config.db.handle(client, msg.op, msg.key, msg.value, msg.auto_commit):
+                        ret = -1
+                        break
                     if 'fail' == self.node.config.db.handle(client, msg.op, msg.key, msg.value, msg.auto_commit):
                         ret = 0
                         break
@@ -137,7 +140,6 @@ class Follower(State):
         if self.node.leader:
             # 之前已经产生了leader，但是还超时了，说明leader挂了
             # 挂了的节点，需要摘除
-            print self.node.leader
             if self.node.leader in self.node.neighbors:
                 self.node.neighbors.remove(self.node.leader)
             # 但是要考虑重连回复neighbors列表，所以这个列表是动态的
@@ -277,7 +279,6 @@ class Leader(State):
         return ElectResponseMessage(self.node.node_key, 0).serialize()
 
     def on_update(self, client, message):
-        # TODO 更改应该随着heartbeat广播到follower上
         # print 'recv client message:', client
         if not self.node.neighbors:
             # 单个节点
@@ -289,12 +290,32 @@ class Leader(State):
             self.clients[client].append(message)
         # return self.node.config.db.handle(client, message.op, message.key, message.value, message.auto_commit)
 
+    def on_client_close(self, client, message):
+        # 目前无法区分client是来自其他node还是真的client
+        if not self.node.neighbors:
+            # 单个节点
+            return self.node.config.db.release(message.client)
+        else:
+            # 集群
+            if self.node.config.db.release(message.client):
+                # 说明是client断开
+                if client not in self.clients:
+                    self.clients[client] = []
+                self.clients[client].append(ClientMessage('release'))
+                # self.clients[client] = [ClientMessage('rollback')]
+            return True
+
     def on_heartbeat_response(self, client, message):
         """
         HeartbeatResponse， 心跳响应，根据响应的值做相应处理
         :param message:
         :return:
         """
+        if message.value == -1:
+            # 说明是释放资源的返回
+            self.clients = dict()
+            self.heartbeat_result = dict()
+            return
         if message.follower not in self.heartbeat_result:
             self.heartbeat_result[message.follower] = message.value
         succeed_response = 0
@@ -307,13 +328,11 @@ class Leader(State):
                 for client in self.clients:
                     client_message = self.clients[client][-1]
                     self.node.server.get_channel(client).input(self.node.config.db.handle(client, client_message.op, client_message.key, client_message.value, client_message.auto_commit) + '\n', False)
-                self.clients = dict()
-                self.heartbeat_result = dict()
             else:
                 for client in self.clients:
                     self.node.server.get_channel(client).input('operate fail in cluster\n', False)
-                self.clients = dict()
-                self.heartbeat_result = dict()
+            self.clients = dict()
+            self.heartbeat_result = dict()
 
     def _heartbeat(self, excepted_time, real_time):
         """
@@ -343,8 +362,8 @@ class Leader(State):
                                                            vector=self.current_vector).serialize(True), False)
                     # 记录心跳发请求发出的时间
                     self.heartbeat_request_time[follower_addr] = time.time()
-                except Exception:
-                    pass
+                except Exception, e:
+                    print e
             # vector自增
             self.current_vector += 1
             if self.current_vector == sys.maxint:
