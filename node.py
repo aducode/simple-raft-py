@@ -111,6 +111,7 @@ class Node(object):
         print '> leader is:\t', self.leader
         print '> neighbors are:\t', self.neighbors
         print '>>'
+        print '> db commit log:\t', self.config.db.log
         print '> db sessions:\t', self.config.db.session
         print '>> ', random.randint(0, 100)
 

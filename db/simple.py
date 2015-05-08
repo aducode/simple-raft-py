@@ -15,7 +15,12 @@ class DB(object):
         """
         self.data = {}
         self.session = {}
-        # self.commit_pos = 0
+        # 提交日志
+        self.log = []
+
+    @property
+    def commit_pos(self):
+        return len(self.log)
 
     def handle(self, session_id, op, key, value, auto_commit):
         """
@@ -132,6 +137,7 @@ class DB(object):
             for log in logs:
                 tokens = log.split(':')
                 getattr(self, 'commit_' + tokens[0])(tokens[1], tokens[2])
+                self.log.append(log)
             if session_id in self.session:
                 del self.session[session_id]
         return 'success'
