@@ -176,12 +176,8 @@ class Server(object):
             # print 'inputs:', self.inputs
             # print 'outputs:', self.outputs
             # print 'exceptins:', self.exceptions
-            try:
-                readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions,
+            readable, writable, exceptional = select.select(self.inputs, self.outputs, self.exceptions,
                                                             self._get_timeout())
-            except Exception:
-                import traceback
-                print traceback.format_exc()
             for r in readable:
                 if r is self.accepter:
                     # A readable socket is ready to accept  a connection

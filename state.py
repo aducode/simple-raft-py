@@ -358,8 +358,9 @@ class Leader(State):
                     sock, follower = self.node.server.connect(follower_addr)
                     follower.input(HeartbeatRequestMessage(self.node.node_key,
                                                            [n for n in self.node.neighbors if n != follower_addr],
-                                                           message=client_messages,
-                                                           vector=self.current_vector).serialize(True), False)
+                                                           message=client_messages, vector=self.current_vector,
+                                                           commit_pos=self.node.config.db.commit_pos).serialize(True),
+                                   False)
                     # 记录心跳发请求发出的时间
                     self.heartbeat_request_time[follower_addr] = time.time()
                 except Exception, e:

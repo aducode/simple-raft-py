@@ -98,13 +98,14 @@ class Message(object):
                 return ElectRequestMessage(node_key)
             elif data.startswith('heartbeat'):
                 heartbeat_msg_body = data.split()
-                alives_info = heartbeat_msg_body[1].split(',')
+                commit_pos = int(heartbeat_msg_body[1])
+                alives_info = heartbeat_msg_body[2].split(',')
                 if not alives_info and len(alives_info) % 2 != 0:
                     return InvalidMessage('Invalid alive nodes info')
                 alives = []
                 for i in xrange(0, len(alives_info), 2):
                     alives.append((alives_info[i], int(alives_info[i+1]), ))
-                heartbeat_extra_msg_body = ' '.join(heartbeat_msg_body[2:])
+                heartbeat_extra_msg_body = ' '.join(heartbeat_msg_body[3:])
                 extra_msgs = []
                 if heartbeat_extra_msg_body:
                     for heartbeat_extra_msg in heartbeat_extra_msg_body.split('|'):
@@ -115,7 +116,7 @@ class Message(object):
                         extra_msgs.append(extra_msg)
                 if len(extra_msgs) == 0:
                     extra_msgs = None
-                return HeartbeatRequestMessage(node_key, alives, extra_msgs, vector)
+                return HeartbeatRequestMessage(node_key, alives, extra_msgs, vector, commit_pos)
             else:
                 return InvalidMessage('Invalid Node Request Message:%s' % data)
         elif data.startswith('@'):
@@ -254,19 +255,21 @@ class HeartbeatRequestMessage(NodeMessage):
         #leader_host:leader_port#heartbeat alivenode1_host,alivenode1_port,alivenode2_host,alivenode2_port... extra_msg
     """
 
-    def __init__(self, leader, alives, message=None, vector=None):
+    def __init__(self, leader, alives, message=None, vector=None, commit_pos=None):
         """
         构造方法
         :param leader:  发出心跳的leader的node_key
         :param alives:  活跃节点列表，同步给其他follower
         :param message: 用于leader与follower同步数据，client message类型
         :param vector:  时间向量
+        :param commit_pos: 日志pos
         :return:
         """
         self.leader = leader
         self.alives = alives
         self.message = message
         self.vector = vector
+        self.commit_pos = commit_pos
 
     def serialize(self, eol=False):
         """
@@ -278,10 +281,10 @@ class HeartbeatRequestMessage(NodeMessage):
             alives_info.append(str(port))
         alives_info.append(str(self.leader[0]))
         alives_info.append(str(self.leader[1]))
-        return '<%d>#%s:%d#heartbeat %s %s' % (self.vector, self.leader[0], self.leader[1], ','.join(alives_info),
-                                               '|'.join([message.serialize() for message in
-                                                         self.message]) if self.message is not None else '') + (
-               '\n' if eol else '')
+        return '<%d>#%s:%d#heartbeat %d %s %s' % (
+            self.vector, self.leader[0], self.leader[1], self.commit_pos, ','.join(alives_info),
+            '|'.join([message.serialize() for message in self.message]) if self.message is not None else '') + (
+            '\n' if eol else '')
 
 
 class HeartbeatResponseMessage(NodeMessage):
