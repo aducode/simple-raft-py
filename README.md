@@ -11,7 +11,7 @@ http://thesecretlivesofdata.com/raft/
 4. cluster内节点选举
 5. Leader挂掉，其余节点从新选举出leader
 6. 单个客户端连接Leader节点进行update操作时实现Leader Follower之间数据同步
-
+7. client关闭后，node内进行资源释放
 目标：
 * 多个客户端连接Leader节点，Leader Follower之间数据同步
 * 新增节点时同步数据（全量同步、增量同步）
