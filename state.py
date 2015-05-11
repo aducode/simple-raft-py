@@ -113,6 +113,11 @@ class Follower(State):
         """
         Follower处理心跳请求消息
         """
+        if self.node.config.db.commit_pos < message.commit_pos:
+            # 说明数据没有同步1.删除elect timeout 2.转换状态
+            self.node.server.rm_timer(self._election_timeout)
+            self.node.state = Syncing(self.node)
+            return
         self.node.leader = message.leader
         self.node.server.rm_timer(self._election_timeout)
         self.node.neighbors = message.alives
@@ -372,3 +377,23 @@ class Leader(State):
         else:
             # 说明只有一个节点
             pass
+
+
+class Syncing(State):
+    """
+    同步状态，专门同步数据
+    """
+    def __init__(self, node):
+        super(Syncing, self).__init__(node)
+        # 3秒后同步一次
+        self.node.server.set_timer(3, False, self._sync)
+
+    def _sync(self):
+        """
+        定时同步函数
+        :return:
+        """
+        print 'syncing ...'
+        if self.node.leader:
+            self.node.server.get_channel(self.node.leader).input(
+                '#%s:%d#sync 10\n' % (self.node.node_key[0], self.node.node_key[1], ), False)
