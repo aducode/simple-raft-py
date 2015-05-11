@@ -13,6 +13,7 @@ http://thesecretlivesofdata.com/raft/
 6. 单个客户端连接Leader节点进行update操作时实现Leader Follower之间数据同步
 7. client关闭后，node内进行资源释放
 8. leader关闭后，释放follower资源
+
 目标：
 * 多个客户端连接Leader节点，Leader Follower之间数据同步
 * 新增节点时同步数据（全量同步、增量同步）
