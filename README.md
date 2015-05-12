@@ -15,6 +15,7 @@ http://thesecretlivesofdata.com/raft/
 8. leader关闭后，释放follower资源
 
 目标：
+
 * 多个客户端连接Leader节点，Leader Follower之间数据同步
 * 新增节点时同步数据（全量同步、增量同步）
 
@@ -26,4 +27,9 @@ http://thesecretlivesofdata.com/raft/
 4. 同步完成转为follower
 
 一些问题：
+
 * 状态转换时，不能自动的处理状态内的定时时间处理函数
+
+Usage:
+
+![image](https://raw.githubusercontent.com/aducode/statics/master/sraft-usage.png)
