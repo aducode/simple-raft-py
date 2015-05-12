@@ -6,10 +6,7 @@ from optparse import OptionParser
 from config import Config
 from node import Node
 
-usage = '''
-    Usage:
-        python code.py host port [neighbor list] [-c config] [-v] [-s]
-    '''
+usage = '\n\tpython code.py host port [neighbor list] [-c config] [-v] [-s]'
 
 
 def init_parser():
