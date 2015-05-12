@@ -19,6 +19,7 @@ http://thesecretlivesofdata.com/raft/
 * 新增节点时同步数据（全量同步、增量同步）
 
 新接入节点数据同步方案：
+
 1. 引入一个新的状态Syncing，表示正在进行数据同步
 2. Leader心跳request带上当前的commit log号
 3. Follower收到leader commit log号后比较自身log号，如果落后，则进入Syncing状态开始同步
