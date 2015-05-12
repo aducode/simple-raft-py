@@ -154,3 +154,13 @@ class DB(object):
         if session_id in self.session:
             del self.session[session_id]
         return 'success'
+
+    def sync(self, commit_logs):
+        for log in commit_logs:
+            self.log.append(log)
+            token = log.split(':')
+            op = token[0]
+            if op == 'set':
+                self.commit_set(token[1], token[2])
+            elif op == 'del':
+                self.commit_delete(token[1], token[2])

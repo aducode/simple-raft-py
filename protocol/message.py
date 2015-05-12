@@ -117,6 +117,13 @@ class Message(object):
                 if len(extra_msgs) == 0:
                     extra_msgs = None
                 return HeartbeatRequestMessage(node_key, alives, extra_msgs, vector, commit_pos)
+            elif data.startswith('sync'):
+                # 同步消息
+                try:
+                    sync_log_len = int(data.split()[1])
+                    return SyncRequestMessage(node_key, sync_log_len)
+                except Exception, e:
+                    return InvalidMessage(str(e))
             else:
                 return InvalidMessage('Invalid Node Request Message:%s' % data)
         elif data.startswith('@'):
@@ -156,6 +163,18 @@ class Message(object):
                     value = int(token[1])
                     return HeartbeatResponseMessage(node_key, value, vector)
                 except ValueError, e:
+                    return InvalidMessage(str(e))
+            elif data.startswith('sync'):
+                # 同步
+                try:
+                    token = data.split()
+                    complete = bool(int(token[1]))
+                    if len(token)>=3:
+                        commit_logs = token[2].split('|')
+                    else:
+                        commit_logs = None
+                    return SyncResponseMessage(node_key, logs=commit_logs, complete=complete)
+                except Exception, e:
                     return InvalidMessage(str(e))
             else:
                 return InvalidMessage('Invalid Response Message:%s' % data)
@@ -310,6 +329,50 @@ class HeartbeatResponseMessage(NodeMessage):
         重载
         """
         return '<%d>@%s:%d@heartbeat %s' % (self.vector, self.follower[0], self.follower[1], self.value) + (
+            '\n' if eol else '')
+
+
+class SyncRequestMessage(NodeMessage):
+    """
+    同步数据
+    """
+    def __init__(self, syncor, value):
+        """
+        构造方法
+        :param syncor:  请求同步的节点
+        :param value:   同步的commit log
+        """
+        self.syncor = syncor
+        self.value = value
+
+    def serialize(self, eol=False):
+        """
+        重载
+        """
+        return '#%s:%d#sync %d' % (self.syncor[0], self.syncor[1], self.value, ) + ('\n' if eol else '')
+
+
+class SyncResponseMessage(NodeMessage):
+    """
+    同步数据
+    """
+    def __init__(self, leader, logs=None, complete=False):
+        """
+        构造方法
+        :param leader:  响应同步的leader节点
+        :param logs:    同步过来的commit log
+        :param complete: 同步是否完成
+        """
+        self.leader = leader
+        self.logs = logs
+        self.complete = complete
+
+    def serialize(self, eol=False):
+        """
+        重载
+        """
+        return '@%s:%d@sync %d %s' % (
+            self.leader[0], self.leader[1], 1 if self.complete else 0, '|'.join(self.logs) if self.logs else '') + (
             '\n' if eol else '')
 
 

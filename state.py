@@ -3,7 +3,8 @@
 from protocol.message import \
     Message, ClientMessage, ClientCloseMessage, \
     ElectRequestMessage, HeartbeatRequestMessage, \
-    ElectResponseMessage, HeartbeatResponseMessage
+    ElectResponseMessage, HeartbeatResponseMessage, \
+    SyncRequestMessage, SyncResponseMessage
 import time
 import sys
 
@@ -37,6 +38,10 @@ class State(object):
             return self.on_elect_request(client, message)
         elif isinstance(message, ElectResponseMessage):
             return self.on_elect_response(client, message)
+        elif isinstance(message, SyncRequestMessage):
+            return self.on_sync_request(client, message)
+        elif isinstance(message, SyncResponseMessage):
+            return self.on_sync_response(client, message)
         else:
             pass
 
@@ -83,6 +88,18 @@ class State(object):
         """
         pass
 
+    def on_sync_request(self, client, message):
+        """
+        接收到同步请求
+        """
+        pass
+
+    def on_sync_response(self, client, message):
+        """
+        接收同步响应
+        """
+        pass
+
     def __str__(self):
         return self.__class__.__name__.strip().upper()
 
@@ -101,6 +118,8 @@ class Follower(State):
         """
         Follower处理选举请求消息
         """
+        if self.node.leader:
+            return ElectResponseMessage(self.node.node_key, 0).serialize()
         if not self.voted:
             self.voted = True
             return ElectResponseMessage(self.node.node_key, 1).serialize()
@@ -113,14 +132,13 @@ class Follower(State):
         """
         Follower处理心跳请求消息
         """
-        if self.node.config.db.commit_pos < message.commit_pos:
-            # 说明数据没有同步1.删除elect timeout 2.转换状态
-            self.node.server.rm_timer(self._election_timeout)
-            self.node.state = Syncing(self.node)
-            return
         self.node.leader = message.leader
         self.node.server.rm_timer(self._election_timeout)
         self.node.neighbors = message.alives
+        if self.node.config.db.commit_pos < message.commit_pos:
+            # 说明数据没有同步1.删除elect timeout 2.转换状态
+            self.node.state = Syncing(self.node)
+            return
         # 处理heartbeat带过来的extra msg
         extra_msg = message.message
         ret = 1
@@ -339,6 +357,14 @@ class Leader(State):
             self.clients = dict()
             self.heartbeat_result = dict()
 
+    def on_sync_request(self, client, message):
+        commit_log_pos = message.value
+        if commit_log_pos < self.node.config.db.commit_pos:
+            return SyncResponseMessage(self.node.node_key, self.node.config.db.log[
+                commit_log_pos:commit_log_pos + self.node.config.sync_count]).serialize()
+        else:
+            return SyncResponseMessage(self.node.node_key, complete=True).serialize()
+
     def _heartbeat(self, excepted_time, real_time):
         """
         心跳函数，同时判断是否有节点挂掉
@@ -386,14 +412,30 @@ class Syncing(State):
     def __init__(self, node):
         super(Syncing, self).__init__(node)
         # 3秒后同步一次
-        self.node.server.set_timer(3, False, self._sync)
+        self.node.server.set_timer(self.node.config.sync_rate, False, self._sync)
 
-    def _sync(self):
+    def on_get(self, client, message):
+        """
+        同步状态的节点不响应受任何client请求
+        :param client:
+        :param message:
+        :return:
+        """
+        return '@%s:%d@redirect' % self.node.leader if self.node.leader \
+            else 'No Leader Elected, please wait until we have a leader...'
+
+    def on_sync_response(self, client, message):
+        if message.logs and not message.complete:
+            self.node.config.db.sync(message.logs)
+            self.node.server.set_timer(self.node.config.sync_rate, False, self._sync)
+        elif message.complete:
+            self.node.state = Follower(self.node)
+
+    def _sync(self, excepted_time, real_time):
         """
         定时同步函数
         :return:
         """
-        print 'syncing ...'
         if self.node.leader:
-            self.node.server.get_channel(self.node.leader).input(
-                '#%s:%d#sync 10\n' % (self.node.node_key[0], self.node.node_key[1], ), False)
+            _, leader = self.node.server.connect(self.node.leader)
+            leader.input(SyncRequestMessage(self.node.node_key, self.node.config.db.commit_pos).serialize(True), False)

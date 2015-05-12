@@ -58,6 +58,18 @@ def init_parser():
                        action='store',
                        type='float',
                        dest='show_state_rate')
+    _parser.add_option('--sync_count',
+                       help='when syncing, how many log sync once, default 10',
+                       default=10,
+                       action='store',
+                       type='int',
+                       dest='sync_count')
+    _parser.add_option('--sync_rate',
+                       help='sync rate, default 1s',
+                       default=1,
+                       action='store',
+                       type='float',
+                       dest='sync_rate')
     return _parser
 
 
@@ -99,7 +111,9 @@ def build_config(parser):
                   heartbeat_timeout=options.heartbeat_timeout,
                   elect_timeout=elect_timeout,
                   debug=options.verbose,
-                  show_state_rate=options.show_state_rate)
+                  show_state_rate=options.show_state_rate,
+                  sync_count = options.sync_count,
+                  sync_rate = options.sync_rate)
 
 
 if __name__ == '__main__':
