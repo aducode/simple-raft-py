@@ -29,6 +29,7 @@ http://thesecretlivesofdata.com/raft/
 一些问题：
 
 * 状态转换时，不能自动的处理状态内的定时时间处理函数
+* 异步调用，整个程序的逻辑是分散的，考虑用**yield协程**重新改写一下事件循环的架构
 
 Usage:
 
