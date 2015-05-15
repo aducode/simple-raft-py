@@ -31,7 +31,6 @@ def home(title, name):
             msg = yield '<html>%s%s</html>' % (head_gen.next(), body_gen.next())
 
 
-
 def head(title):
     msg = title
     msg = yield '<head><title>%s</title></head>' % msg

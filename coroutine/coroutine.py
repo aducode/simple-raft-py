@@ -15,14 +15,3 @@ def coroutine(func):
         return g
     start.__doc__ = func.__doc__
     return start
-
-
-class Coroutine(object):
-    """
-    协程类
-    """
-    def __init__(self):
-        """
-        构造方法
-        :return:
-        """
