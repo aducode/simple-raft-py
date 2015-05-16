@@ -56,3 +56,5 @@ target/
 #IDE
 .idea/*
 *.pyproj
+*.sln
+*.v12.suo
