@@ -55,3 +55,4 @@ target/
 
 #IDE
 .idea/*
+*.pyproj
