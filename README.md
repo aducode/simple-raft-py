@@ -34,4 +34,4 @@ http://thesecretlivesofdata.com/raft/
 
 Usage:
 
-![image](https://raw.githubusercontent.com/aducode/statics/master/sraft-usage.png)
+![image](https://raw.githubusercontent.com/aducode/statics/master/img/sraft-usage.png)
