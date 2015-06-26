@@ -38,4 +38,4 @@ Usage:
 
 
 BLOG：
-[http://blog.csdn.net/aducode/article/details/45826181](http://blog.csdn.net/aducode/article/details/45826181)
+[http://blog.csdn.net/aducode/article/details/45826181](http://aducode.github.io/posts/2015-06-04/simple-raft-py.html)
