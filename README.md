@@ -37,5 +37,21 @@ Usage:
 ![image](https://raw.githubusercontent.com/aducode/statics/master/img/sraft-usage.png)
 
 
+目前没有单独的客户端程序，可以使用telnet进行测试
+
+```bash
+$ telnet 127.0.0.1 2333
+> set test 1
+> @127.0.0.1:2335@redirect  # 表示写操作被重定向到主节点
+
+$ telnet 127.0.0.1 2335
+> set test 1
+> success                   # 写成功，事物未提交
+> commit
+> success                   # 提交成功，写操作同步到Followers
+> get test
+> 1                         # 返回结果
+```
+
 BLOG：
 [http://aducode.github.io/posts/2015-06-04/simple-raft-py.html](http://aducode.github.io/posts/2015-06-04/simple-raft-py.html)
